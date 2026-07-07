@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Один Пост</title>
     <link rel="stylesheet" href="/css/style.css">
 </head>
@@ -87,17 +87,29 @@
                     </div>
                 </div>
             </div>
+
             <div id="messagesPage" class="hidden" style="width: 100%;">
-                <div class="messages-layout">
-                    <div class="dialogs-sidebar">
+                <div class="messages-layout" id="messagesLayout">
+                    <div class="dialogs-sidebar" id="dialogsSidebar">
                         <div class="dialogs-header">💬 Сообщения</div>
-                        <div class="search-chat"><input type="text" id="searchUserInput" placeholder="Поиск..."><div id="searchResults" class="search-results hidden"></div></div>
+                        <div class="search-chat">
+                            <input type="text" id="searchUserInput" placeholder="Поиск...">
+                            <div id="searchResults" class="search-results hidden"></div>
+                        </div>
                         <div class="dialogs-list" id="dialogsList"></div>
                     </div>
-                    <div class="chat-area">
-                        <div class="chat-header" id="chatPartnerName">Выберите диалог</div>
-                        <div class="chat-messages" id="chatMessages"><div class="chat-empty">Выберите диалог или найдите пользователя</div></div>
-                        <div class="chat-input"><input type="text" id="messageInput" placeholder="Сообщение..." disabled><button id="sendMessageBtn" disabled>Отправить</button></div>
+                    <div class="chat-area" id="chatArea">
+                        <div class="chat-header" id="chatPartnerName">
+                            <button class="chat-back-btn" id="chatBackBtn">←</button>
+                            <span id="chatPartnerText">Выберите диалог</span>
+                        </div>
+                        <div class="chat-messages" id="chatMessages">
+                            <div class="chat-empty">Выберите диалог или найдите пользователя</div>
+                        </div>
+                        <div class="chat-input">
+                            <input type="text" id="messageInput" placeholder="Сообщение..." disabled>
+                            <button id="sendMessageBtn" disabled>Отправить</button>
+                        </div>
                     </div>
                 </div>
             </div>
