@@ -1,7 +1,7 @@
 {
   "name": "one-post",
   "version": "1.0.0",
-  "description": "Соцсеть",
+  "description": "Соцсеть с одним постом в день",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
