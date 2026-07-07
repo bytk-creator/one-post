@@ -242,3 +242,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxyge
     .chat-messages::-webkit-scrollbar { width: 0; }
     .dialogs-list::-webkit-scrollbar { width: 0; }
 }
+
+/* Запрет зума при фокусе на инпут */
+input, textarea, select, button {
+    font-size: 16px !important;
+}
