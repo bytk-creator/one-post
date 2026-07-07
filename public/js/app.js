@@ -12,6 +12,7 @@ const loginForm = document.getElementById('loginForm');
 const registerForm = document.getElementById('registerForm');
 const tabBtns = document.querySelectorAll('.tab-btn');
 const logoutBtn = document.getElementById('logoutBtn');
+const logoutBtnMobile = document.getElementById('logoutBtnMobile');
 const msgBadge = document.getElementById('msgBadge');
 
 const feedPage = document.getElementById('feedPage');
@@ -81,6 +82,8 @@ document.getElementById('loginFormEl').addEventListener('submit', async (e) => {
 });
 
 logoutBtn.addEventListener('click', () => { token = ''; currentUser = null; localStorage.removeItem('token'); clearInterval(unreadInterval); authBlock.classList.remove('hidden'); appBlock.classList.add('hidden'); });
+
+logoutBtnMobile.addEventListener('click', () => { token = ''; currentUser = null; localStorage.removeItem('token'); clearInterval(unreadInterval); authBlock.classList.remove('hidden'); appBlock.classList.add('hidden'); });
 
 // === НАВИГАЦИЯ ===
 sidebarBtns.forEach(btn => {
