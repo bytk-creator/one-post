@@ -5,6 +5,7 @@ let unreadInterval = null;
 let viewingUserId = null;
 let canPostToday = true;
 let selectedPhoto = null;
+let chatPhoto = null;
 
 const authBlock = document.getElementById('authBlock');
 const appBlock = document.getElementById('appBlock');
@@ -45,6 +46,11 @@ const messageInput = document.getElementById('messageInput');
 const sendMessageBtn = document.getElementById('sendMessageBtn');
 const searchUserInput = document.getElementById('searchUserInput');
 const searchResults = document.getElementById('searchResults');
+const chatAttachBtn = document.getElementById('chatAttachBtn');
+const chatPhotoInput = document.getElementById('chatPhotoInput');
+const chatPhotoPreview = document.getElementById('chatPhotoPreview');
+const chatPhotoPreviewImg = document.getElementById('chatPhotoPreviewImg');
+const chatRemovePhoto = document.getElementById('chatRemovePhoto');
 
 const settingsUsername = document.getElementById('settingsUsername');
 const settingsBio = document.getElementById('settingsBio');
@@ -265,15 +271,78 @@ function openChat(userId, username, avatarUrl) {
     if (partnerInfo) {
         partnerInfo.addEventListener('click', (e) => { e.stopPropagation(); viewProfile(userId); });
     }
-    messageInput.disabled = false; sendMessageBtn.disabled = false;
+    messageInput.disabled = false;
+    if (!chatPhoto) sendMessageBtn.disabled = true;
     loadMessages(); loadDialogs();
     if (window.innerWidth <= 768) { dialogsSidebar.classList.add('chat-open'); messagesLayout.classList.add('mobile-view'); }
 }
 
 chatBackBtn.addEventListener('click', () => { dialogsSidebar.classList.remove('chat-open'); messagesLayout.classList.remove('mobile-view'); currentChatPartner = null; chatPartnerText.innerHTML = 'Выберите диалог'; messageInput.disabled = true; sendMessageBtn.disabled = true; chatMessages.innerHTML = '<div class="chat-empty"><div class="empty-chat-icon">💬</div>Выберите диалог или найдите пользователя</div>'; });
-async function loadMessages() { if (!currentChatPartner) { chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог</div>'; return; } try { const msgs = await apiCall('/api/messages/' + currentChatPartner, 'GET'); chatMessages.innerHTML = ''; if (!msgs.length) chatMessages.innerHTML = '<div class="chat-empty"><div class="empty-chat-icon">👋</div>Напишите первым!</div>'; msgs.forEach(m => { const div = document.createElement('div'); div.className = 'message ' + (String(m.from) === String(currentUser.id) ? 'message-sent' : 'message-received'); const t = new Date(m.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); div.innerHTML = escapeHTML(m.text) + '<div class="message-time">' + t + '</div>'; chatMessages.appendChild(div); }); chatMessages.scrollTop = chatMessages.scrollHeight; updateUnreadBadge(); } catch (err) {} }
-async function sendMsg() { const t = messageInput.value.trim(); if (!t || !currentChatPartner) return; try { await apiCall('/api/messages', 'POST', { to: currentChatPartner, text: t }); messageInput.value = ''; loadMessages(); loadDialogs(); } catch (err) { alert(err.message); } }
-sendMessageBtn.addEventListener('click', sendMsg); messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMsg(); });
+
+messageInput.addEventListener('input', () => {
+    if (messageInput.value.trim() || chatPhoto) {
+        sendMessageBtn.disabled = false;
+    } else {
+        sendMessageBtn.disabled = true;
+    }
+});
+
+async function loadMessages() { if (!currentChatPartner) { chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог</div>'; return; } try { const msgs = await apiCall('/api/messages/' + currentChatPartner, 'GET'); chatMessages.innerHTML = ''; if (!msgs.length) chatMessages.innerHTML = '<div class="chat-empty"><div class="empty-chat-icon">👋</div>Напишите первым!</div>'; msgs.forEach(m => { const div = document.createElement('div'); div.className = 'message ' + (String(m.from) === String(currentUser.id) ? 'message-sent' : 'message-received'); const t = new Date(m.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); const textHtml = m.text ? escapeHTML(m.text) : ''; const imgHtml = m.imageUrl ? `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">` : ''; div.innerHTML = (textHtml ? textHtml : '') + imgHtml + '<div class="message-time">' + t + '</div>'; chatMessages.appendChild(div); }); chatMessages.scrollTop = chatMessages.scrollHeight; updateUnreadBadge(); } catch (err) {} }
+
+async function sendMsg() {
+    const t = messageInput.value.trim();
+    if ((!t && !chatPhoto) || !currentChatPartner) return;
+    try {
+        if (chatPhoto) {
+            const fd = new FormData();
+            fd.append('to', currentChatPartner);
+            fd.append('text', t || '');
+            fd.append('image', chatPhoto);
+            const r = await fetch('/api/messages/photo', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token },
+                body: fd
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error || 'Ошибка');
+        } else {
+            await apiCall('/api/messages', 'POST', { to: currentChatPartner, text: t });
+        }
+        messageInput.value = '';
+        chatPhoto = null;
+        chatPhotoInput.value = '';
+        chatPhotoPreview.classList.add('hidden');
+        if (!messageInput.value.trim()) sendMessageBtn.disabled = true;
+        loadMessages();
+        loadDialogs();
+    } catch (err) { alert(err.message); }
+}
+
+sendMessageBtn.addEventListener('click', sendMsg);
+messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMsg(); });
+
+// === ФОТО В ЧАТЕ ===
+chatAttachBtn.addEventListener('click', () => { chatPhotoInput.click(); });
+chatPhotoInput.addEventListener('change', () => {
+    const f = chatPhotoInput.files[0];
+    if (f) {
+        chatPhoto = f;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            chatPhotoPreviewImg.src = e.target.result;
+            chatPhotoPreview.classList.remove('hidden');
+            sendMessageBtn.disabled = false;
+        };
+        reader.readAsDataURL(f);
+    }
+});
+chatRemovePhoto.addEventListener('click', () => {
+    chatPhoto = null;
+    chatPhotoInput.value = '';
+    chatPhotoPreview.classList.add('hidden');
+    if (!messageInput.value.trim()) sendMessageBtn.disabled = true;
+});
+
 setInterval(() => { if (currentChatPartner && !messagesPage.classList.contains('hidden')) loadMessages(); }, 3000);
 setInterval(() => { if (!messagesPage.classList.contains('hidden')) loadDialogs(); }, 5000);
 
