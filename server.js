@@ -122,11 +122,7 @@ function serveJSON(res, data, status = 200) {
 function queryOne(sql, params = []) {
     const stmt = db.prepare(sql);
     stmt.bind(params);
-    if (stmt.step()) {
-        const row = stmt.getAsObject();
-        stmt.free();
-        return row;
-    }
+    if (stmt.step()) { const row = stmt.getAsObject(); stmt.free(); return row; }
     stmt.free();
     return null;
 }
@@ -303,11 +299,11 @@ const server = http.createServer(async (req, res) => {
         const partners = queryAll('SELECT DISTINCT CASE WHEN fromUserId = ? THEN toUserId ELSE fromUserId END as partnerId FROM messages WHERE fromUserId = ? OR toUserId = ?', [currentUser.id, currentUser.id, currentUser.id]);
         const dialogs = [];
         for (const p of partners) {
-            const partner = queryOne('SELECT * FROM users WHERE id = ?', [p.partnerId]);
+            const partner = queryOne('SELECT * FROM users WHERE id = ?', [String(p.partnerId)]);
             if (!partner) continue;
-            const lastMsg = queryOne('SELECT * FROM messages WHERE (fromUserId = ? AND toUserId = ?) OR (fromUserId = ? AND toUserId = ?) ORDER BY time DESC LIMIT 1', [currentUser.id, p.partnerId, p.partnerId, currentUser.id]);
-            const unread = queryOne('SELECT COUNT(*) as count FROM messages WHERE toUserId = ? AND fromUserId = ? AND read = 0', [currentUser.id, p.partnerId]).count;
-            dialogs.push({ userId: partner.id, username: partner.username, avatarUrl: partner.avatarUrl, lastMessage: lastMsg ? lastMsg.text : '', lastTime: lastMsg ? lastMsg.time : '', unread });
+            const lastMsg = queryOne('SELECT * FROM messages WHERE (fromUserId = ? AND toUserId = ?) OR (fromUserId = ? AND toUserId = ?) ORDER BY time DESC LIMIT 1', [currentUser.id, partner.id, partner.id, currentUser.id]);
+            const unread = queryOne('SELECT COUNT(*) as count FROM messages WHERE toUserId = ? AND fromUserId = ? AND read = 0', [currentUser.id, partner.id]).count;
+            dialogs.push({ userId: String(partner.id), username: partner.username, avatarUrl: partner.avatarUrl, lastMessage: lastMsg ? lastMsg.text : '', lastTime: lastMsg ? lastMsg.time : '', unread });
         }
         dialogs.sort((a, b) => b.lastTime.localeCompare(a.lastTime));
         return serveJSON(res, dialogs);
@@ -318,17 +314,18 @@ const server = http.createServer(async (req, res) => {
         const partnerId = url.split('/')[3];
         runSql('UPDATE messages SET read = 1 WHERE fromUserId = ? AND toUserId = ? AND read = 0', [partnerId, currentUser.id]);
         const messages = queryAll('SELECT messages.*, u1.username as fromUsername, u2.username as toUsername FROM messages JOIN users u1 ON messages.fromUserId = u1.id JOIN users u2 ON messages.toUserId = u2.id WHERE (fromUserId = ? AND toUserId = ?) OR (fromUserId = ? AND toUserId = ?) ORDER BY time ASC', [currentUser.id, partnerId, partnerId, currentUser.id]);
-        return serveJSON(res, messages);
+        const fixed = messages.map(m => ({ ...m, from: String(m.from), to: String(m.to), fromUserId: String(m.fromUserId), toUserId: String(m.toUserId) }));
+        return serveJSON(res, fixed);
     }
 
     if (url === '/api/messages' && method === 'POST') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
         const { to, text } = await readBody(req);
         if (!to || !text || !text.trim()) return serveJSON(res, { error: 'Получатель и текст обязательны' }, 400);
-        if (to === currentUser.id) return serveJSON(res, { error: 'Нельзя себе' }, 400);
+        if (String(to) === String(currentUser.id)) return serveJSON(res, { error: 'Нельзя себе' }, 400);
         const msgId = Date.now().toString();
-        runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, to, text.trim(), new Date().toISOString()]);
-        return serveJSON(res, { success: true, message: { id: msgId, from: currentUser.id, to, text: text.trim(), fromUsername: currentUser.username } });
+        runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, String(to), text.trim(), new Date().toISOString()]);
+        return serveJSON(res, { success: true, message: { id: msgId, from: String(currentUser.id), to: String(to), text: text.trim(), fromUsername: currentUser.username } });
     }
 
     if (url.startsWith('/api/users/search') && method === 'GET') {
@@ -336,7 +333,7 @@ const server = http.createServer(async (req, res) => {
         const urlObj = new URL(url, 'http://localhost');
         const query = urlObj.searchParams.get('q') || '';
         const users = queryAll('SELECT id, username FROM users WHERE username LIKE ? AND id != ? LIMIT 10', ['%' + query + '%', currentUser.id]);
-        return serveJSON(res, users);
+        return serveJSON(res, users.map(u => ({ id: String(u.id), username: u.username })));
     }
 
     if (url === '/api/unread' && method === 'GET') {
