@@ -171,7 +171,7 @@ async function loadFeed() {
         const posts = await apiCall('/api/posts', 'GET');
         if (!posts || !posts.length) {
             feedContainer.innerHTML = `<div class="empty-feed">
-                <div class="empty-icon"><svg viewBox="0 0 80 80" width="64" height="64"><rect x="12" y="16" width="56" height="48" rx="8" fill="none" stroke="currentColor" stroke-width="3"/><line x1="24" y1="32" x2="56" y2="32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="24" y1="42" x2="48" y2="42" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/><line x1="24" y1="52" x2="40" y2="52" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/></svg></div>
+                <div class="empty-icon"><svg viewBox="0 0 80 80" width="64" height="64"><rect x="12" y="16" width="56" height="48" rx="8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><line x1="24" y1="32" x2="56" y2="32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="24" y1="42" x2="48" y2="42" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/><line x1="24" y1="52" x2="40" y2="52" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/></svg></div>
                 <h3>Лента пуста</h3><p>Здесь будут посты пользователей. Станьте первым!</p></div>`;
             return;
         }
@@ -209,7 +209,7 @@ async function viewProfile(userId) {
         const posts = await apiCall('/api/user/' + userId + '/posts', 'GET');
         const pc = document.createElement('div'); pc.className = 'profile-posts';
         if (!posts || !posts.length) {
-            pc.innerHTML = `<div class="empty-feed"><div class="empty-icon"><svg viewBox="0 0 80 80" width="48" height="48"><rect x="16" y="20" width="48" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="3"/><line x1="28" y1="34" x2="52" y2="34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="28" y1="44" x2="44" y2="44" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><h3>Нет постов</h3><p>Пользователь пока ничего не опубликовал</p></div>`;
+            pc.innerHTML = `<div class="empty-feed"><div class="empty-icon"><svg viewBox="0 0 80 80" width="48" height="48"><rect x="16" y="20" width="48" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><line x1="28" y1="34" x2="52" y2="34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="28" y1="44" x2="44" y2="44" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><h3>Нет постов</h3><p>Пользователь пока ничего не опубликовал</p></div>`;
         } else {
             const ids = posts.map(p => p.id); const likesData = await apiCall('/api/likes', 'POST', { postIds: ids });
             posts.forEach(post => {
