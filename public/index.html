@@ -10,7 +10,9 @@
 
     <div id="authBlock">
         <div class="auth-card">
-            <div class="logo">📝</div>
+            <div class="logo">
+                <svg viewBox="0 0 40 40" width="40" height="40"><rect x="4" y="8" width="32" height="24" rx="4" fill="none" stroke="#2688EB" stroke-width="2.5"/><line x1="12" y1="16" x2="28" y2="16" stroke="#2688EB" stroke-width="2.5" stroke-linecap="round"/><line x1="12" y1="22" x2="24" y2="22" stroke="#94C5FF" stroke-width="2.5" stroke-linecap="round"/></svg>
+            </div>
             <h1>Один Пост</h1>
             <p class="subtitle">Одна мысль в день</p>
             <div class="tabs">
@@ -38,18 +40,21 @@
 
     <div id="appBlock" class="hidden">
         <div class="sidebar">
-            <div class="sidebar-logo">📝 Один Пост</div>
+            <div class="sidebar-logo">
+                <svg viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="5" width="18" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="7" y1="10" x2="17" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="7" y1="14" x2="13" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/></svg>
+                Один Пост
+            </div>
             <nav class="sidebar-nav">
                 <button class="sidebar-btn active" data-page="feed">
-                    <svg class="icon-svg" viewBox="0 0 24 24" width="20" height="20"><path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z" fill="currentColor"/></svg>
+                    <svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
                     Лента
                 </button>
                 <button class="sidebar-btn" data-page="messages">
-                    <svg class="icon-svg" viewBox="0 0 24 24" width="20" height="20"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z" fill="currentColor"/><circle cx="8" cy="9" r="1.5" fill="currentColor"/><circle cx="12" cy="9" r="1.5" fill="currentColor"/><circle cx="16" cy="9" r="1.5" fill="currentColor"/></svg>
+                    <svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 012 2v10a2 2 0 01-2 2H8l-4 4V6a2 2 0 012-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="8" cy="11" r="1.25" fill="currentColor"/><circle cx="12" cy="11" r="1.25" fill="currentColor"/><circle cx="16" cy="11" r="1.25" fill="currentColor"/></svg>
                     Сообщения <span id="msgBadge" class="badge hidden">0</span>
                 </button>
                 <button class="sidebar-btn" data-page="settings">
-                    <svg class="icon-svg" viewBox="0 0 24 24" width="20" height="20"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.33-.02-.64-.06-.94l2.02-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.38.96a7.06 7.06 0 00-1.62-.94l-.36-2.54a.48.48 0 00-.48-.41h-3.84a.48.48 0 00-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.38-.96a.49.49 0 00-.59.22L2.74 8.87a.48.48 0 00.12.61l2.02 1.58c-.04.3-.06.61-.06.94s.02.64.06.94l-2.02 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.38-.96c.5.37 1.03.7 1.62.94l.36 2.54c.05.24.26.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.38.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.02-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" fill="currentColor"/></svg>
+                    <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4.93 4.93l2.12 2.12m9.9 9.9l2.12 2.12M4.93 19.07l2.12-2.12m9.9-9.9l2.12-2.12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                     Настройки
                 </button>
             </nav>
@@ -57,7 +62,7 @@
                 <div class="sidebar-avatar" id="sidebarAvatar">?</div>
                 <div class="sidebar-user"><div class="sidebar-username" id="sidebarUsername">Пользователь</div></div>
                 <button class="sidebar-logout" id="logoutBtn" title="Выйти">
-                    <svg class="icon-svg" viewBox="0 0 24 24" width="18" height="18"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" fill="currentColor"/></svg>
+                    <svg class="icon-svg" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4m7 14l5-5-5-5m5 5H9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
             </div>
         </div>
@@ -78,9 +83,9 @@
                     <div class="settings-page">
                         <div id="settingsSuccess" class="settings-success hidden"></div>
                         <div class="settings-card">
-                            <h3>🎨 Оформление</h3>
+                            <h3>Оформление</h3>
                             <div class="theme-toggle-row">
-                                <span>🌙 Тёмная тема</span>
+                                <span>Тёмная тема</span>
                                 <label class="theme-switch">
                                     <input type="checkbox" id="themeToggle">
                                     <span class="theme-slider"></span>
@@ -88,26 +93,26 @@
                             </div>
                         </div>
                         <div class="settings-card">
-                            <h3>🖼️ Аватар</h3>
+                            <h3>Аватар</h3>
                             <div class="settings-avatar-area">
                                 <div id="settingsAvatarContainer"></div>
-                                <div><label class="settings-avatar-btn" for="avatarInput">📷 Загрузить фото</label><input type="file" id="avatarInput" style="display:none;" accept="image/*"></div>
+                                <div><label class="settings-avatar-btn" for="avatarInput">Загрузить фото</label><input type="file" id="avatarInput" style="display:none;" accept="image/*"></div>
                             </div>
                         </div>
                         <div class="settings-card">
-                            <h3>👤 Профиль</h3>
+                            <h3>Профиль</h3>
                             <div class="settings-field"><label>Имя пользователя</label><input type="text" id="settingsUsername" placeholder="Ваше имя"></div>
                             <div class="settings-field"><label>О себе</label><textarea id="settingsBio" placeholder="Расскажите о себе..."></textarea><div class="hint">До 200 символов</div></div>
-                            <button class="btn-save" id="saveProfile">💾 Сохранить</button>
+                            <button class="btn-save" id="saveProfile">Сохранить</button>
                         </div>
                         <div class="settings-card">
-                            <h3>🔒 Пароль</h3>
+                            <h3>Пароль</h3>
                             <div class="settings-field"><label>Новый пароль</label><input type="password" id="settingsPassword" placeholder="Оставьте пустым, чтобы не менять"><div class="hint">Минимум 4 символа</div></div>
-                            <button class="btn-save" id="savePassword">🔐 Сменить пароль</button>
+                            <button class="btn-save" id="savePassword">Сменить пароль</button>
                         </div>
                         <div class="settings-card mobile-logout-card">
                             <button class="btn-logout-mobile" id="logoutBtnMobile">
-                                <svg class="icon-svg" viewBox="0 0 24 24" width="18" height="18"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" fill="currentColor"/></svg>
+                                <svg class="icon-svg" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4m7 14l5-5-5-5m5 5H9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                 Выйти из аккаунта
                             </button>
                         </div>
@@ -118,7 +123,7 @@
             <div id="messagesPage" class="hidden" style="width: 100%;">
                 <div class="messages-layout" id="messagesLayout">
                     <div class="dialogs-sidebar" id="dialogsSidebar">
-                        <div class="dialogs-header">💬 Сообщения</div>
+                        <div class="dialogs-header">Сообщения</div>
                         <div class="search-chat">
                             <input type="text" id="searchUserInput" placeholder="Поиск...">
                             <div id="searchResults" class="search-results hidden"></div>
@@ -127,7 +132,9 @@
                     </div>
                     <div class="chat-area" id="chatArea">
                         <div class="chat-header" id="chatPartnerName">
-                            <button class="chat-back-btn" id="chatBackBtn">←</button>
+                            <button class="chat-back-btn" id="chatBackBtn">
+                                <svg viewBox="0 0 24 24" width="20" height="20"><path d="M19 12H5m7-7l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </button>
                             <span id="chatPartnerText">Выберите диалог</span>
                         </div>
                         <div class="chat-messages" id="chatMessages">
@@ -148,11 +155,14 @@
             <h3>Новый пост</h3>
             <textarea id="postTextarea" placeholder="Что у вас на уме?"></textarea>
             <div class="photo-upload-area">
-                <label class="photo-upload-label" for="photoInput" id="photoLabel">📷 Фото</label>
+                <label class="photo-upload-label" for="photoInput" id="photoLabel">
+                    <svg viewBox="0 0 24 24" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="M3 16l5-5 4 4 3-3 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+                    Фото
+                </label>
                 <input type="file" id="photoInput" class="photo-upload-input" accept="image/*">
                 <div id="photoPreview" class="photo-preview hidden"><img id="photoPreviewImg" src="" alt="Превью"><button class="remove-photo" id="removePhoto">✕</button></div>
             </div>
-            <div id="postLimitWarning" class="limit-warning hidden">⚠️ Вы уже опубликовали пост сегодня. Приходите завтра!</div>
+            <div id="postLimitWarning" class="limit-warning hidden">Вы уже опубликовали пост сегодня. Приходите завтра!</div>
             <div class="modal-actions">
                 <button class="btn-cancel" id="closeModal">Отмена</button>
                 <button class="btn-submit" id="publishBtn">Опубликовать</button>
