@@ -309,25 +309,58 @@ const server = http.createServer(async (req, res) => {
         return serveJSON(res, dialogs);
     }
 
-    if (url.startsWith('/api/messages/') && method === 'GET') {
+    if (url.startsWith('/api/messages/') && url !== '/api/messages/photo' && method === 'GET') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
         const partnerId = url.split('/')[3];
         runSql('UPDATE messages SET read = 1 WHERE fromUserId = ? AND toUserId = ? AND read = 0', [partnerId, currentUser.id]);
         const messages = queryAll('SELECT messages.*, u1.username as fromUsername, u2.username as toUsername FROM messages JOIN users u1 ON messages.fromUserId = u1.id JOIN users u2 ON messages.toUserId = u2.id WHERE (fromUserId = ? AND toUserId = ?) OR (fromUserId = ? AND toUserId = ?) ORDER BY time ASC', [currentUser.id, partnerId, partnerId, currentUser.id]);
-        const fixed = messages.map(m => ({ 
-            ...m, 
-            id: String(m.id),
-            from: String(m.fromUserId), 
-            to: String(m.toUserId),
-            fromUserId: String(m.fromUserId),
-            toUserId: String(m.toUserId),
-            text: m.text,
-            time: m.time,
-            read: m.read,
-            fromUsername: m.fromUsername,
-            toUsername: m.toUsername
-        }));
+        const fixed = messages.map(m => {
+            let text = m.text;
+            let imageUrl = null;
+            try {
+                const parsed = JSON.parse(m.text);
+                if (parsed && typeof parsed === 'object') {
+                    text = parsed.text || '';
+                    imageUrl = parsed.imageUrl || null;
+                }
+            } catch (e) {}
+            return { 
+                ...m, 
+                id: String(m.id),
+                from: String(m.fromUserId), 
+                to: String(m.toUserId),
+                fromUserId: String(m.fromUserId),
+                toUserId: String(m.toUserId),
+                text,
+                imageUrl,
+                time: m.time,
+                read: m.read,
+                fromUsername: m.fromUsername,
+                toUsername: m.toUsername
+            };
+        });
         return serveJSON(res, fixed);
+    }
+
+    if (url === '/api/messages/photo' && method === 'POST') {
+        if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
+        const { fields, files } = await parseFormData(req);
+        const to = fields.to;
+        const text = fields.text || '';
+        if (!to) return serveJSON(res, { error: 'Получатель обязателен' }, 400);
+        if (String(to) === String(currentUser.id)) return serveJSON(res, { error: 'Нельзя себе' }, 400);
+        let imageUrl = null;
+        if (files.image && files.image[0]) {
+            const file = files.image[0];
+            const ext = path.extname(file.originalFilename || '.jpg');
+            const fileName = 'chat-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex') + ext;
+            fs.renameSync(file.filepath, path.join(UPLOADS_DIR, fileName));
+            imageUrl = '/uploads/' + fileName;
+        }
+        const msgId = Date.now().toString();
+        const storedText = imageUrl ? JSON.stringify({ text: (text || '').trim(), imageUrl }) : (text || '').trim();
+        runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, String(to), storedText, new Date().toISOString()]);
+        return serveJSON(res, { success: true, message: { id: msgId, from: String(currentUser.id), to: String(to), text: text.trim(), imageUrl, fromUsername: currentUser.username } });
     }
 
     if (url === '/api/messages' && method === 'POST') {
