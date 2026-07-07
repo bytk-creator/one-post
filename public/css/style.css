@@ -170,16 +170,138 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxyge
 .search-result-item { padding: 10px 14px; cursor: pointer; font-size: 13px; }
 .search-result-item:hover { background: #F0F4FF; }
 
-@media (max-width: 800px) {
-    .sidebar { width: 100%; height: auto; position: relative; flex-direction: row; padding: 8px; border-right: none; border-bottom: 1px solid var(--border); }
+/* ==================== */
+/* МОБИЛЬНАЯ ВЕРСИЯ    */
+/* ==================== */
+@media (max-width: 768px) {
+    /* Боковая панель — снизу */
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: fixed;
+        bottom: 0;
+        top: auto;
+        left: 0;
+        right: 0;
+        flex-direction: row;
+        padding: 6px 4px;
+        border-right: none;
+        border-top: 1px solid var(--border);
+        background: white;
+        z-index: 100;
+        padding-bottom: env(safe-area-inset-bottom, 8px);
+    }
     .sidebar-logo { display: none; }
-    .sidebar-nav { flex-direction: row; gap: 0; }
-    .sidebar-btn { padding: 8px; font-size: 0; justify-content: center; }
-    .sidebar-btn .icon { font-size: 22px; margin: 0; }
+    .sidebar-nav {
+        flex: 1;
+        flex-direction: row;
+        justify-content: space-around;
+        gap: 0;
+    }
+    .sidebar-btn {
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        padding: 4px 2px;
+        font-size: 10px;
+        border-radius: 6px;
+        min-width: 56px;
+    }
+    .sidebar-btn .icon { font-size: 22px; }
+    .sidebar-btn .badge {
+        position: absolute;
+        top: 0;
+        right: 10px;
+        min-width: 16px;
+        height: 16px;
+        font-size: 9px;
+    }
     .sidebar-footer { display: none; }
-    #appBlock { flex-direction: column; }
-    .main-content { margin-left: 0; padding: 12px; }
-    .messages-layout { flex-direction: column; height: auto; }
-    .dialogs-sidebar { width: 100%; height: 200px; }
-    .chat-area { min-height: 350px; }
+
+    /* Основной контент */
+    #appBlock { flex-direction: column; padding-bottom: 70px; }
+    .main-content {
+        margin-left: 0;
+        padding: 12px 16px;
+        max-width: 100%;
+    }
+    .content-wrapper { max-width: 100%; }
+
+    /* Лента */
+    .feed-title { font-size: 18px; padding-left: 4px; }
+    .create-post { border-radius: 12px; margin-bottom: 12px; }
+    .post-card { border-radius: 12px; margin-bottom: 10px; }
+
+    /* Модалка — снизу */
+    .modal-overlay { align-items: flex-end; }
+    .modal {
+        border-radius: 16px 16px 0 0;
+        max-width: 100%;
+        padding: 20px 16px 28px;
+        max-height: 85vh;
+    }
+    .modal textarea { height: 100px; font-size: 16px; }
+    .modal-actions { gap: 8px; }
+    .btn-cancel, .btn-submit { padding: 12px 20px; font-size: 15px; }
+
+    /* Профиль */
+    .profile-card { border-radius: 12px; padding: 24px 16px; }
+    .profile-name { font-size: 20px; }
+    .profile-stats { gap: 24px; }
+    .stat-num { font-size: 20px; }
+
+    /* Сообщения */
+    .messages-layout {
+        flex-direction: column;
+        height: calc(100vh - 140px);
+        height: calc(100dvh - 140px);
+        border-radius: 12px;
+    }
+    .dialogs-sidebar {
+        width: 100%;
+        height: 40%;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+    .chat-area { flex: 1; min-height: 0; }
+    .chat-messages { padding: 12px; }
+    .message { max-width: 85%; font-size: 15px; }
+    .chat-input { padding: 10px 12px; gap: 6px; }
+    .chat-input input { padding: 10px 14px; font-size: 15px; }
+    .chat-input button { padding: 10px 14px; font-size: 14px; }
+
+    /* Настройки */
+    .settings-page { max-width: 100%; padding: 0; }
+    .settings-card { border-radius: 12px; padding: 20px 16px; }
+
+    /* Кнопки */
+    .btn-msg, .btn-back-profile, .btn-save {
+        padding: 12px 20px;
+        font-size: 15px;
+        min-height: 44px;
+    }
+    .btn-save { width: 100%; }
+
+    /* Инпуты */
+    .settings-field input,
+    .settings-field textarea,
+    .form-group input {
+        padding: 12px 14px;
+        font-size: 16px;
+    }
+    .search-chat input {
+        padding: 10px 14px;
+        font-size: 15px;
+    }
+
+    /* Аватарки */
+    .post-avatar { width: 36px; height: 36px; font-size: 14px; }
+    .dialog-avatar { width: 40px; height: 40px; font-size: 15px; }
+    .profile-avatar-placeholder,
+    .profile-avatar-wrapper,
+    .profile-avatar-wrapper img { width: 72px; height: 72px; }
+
+    /* Скрываем скроллбар */
+    .chat-messages::-webkit-scrollbar { width: 0; }
+    .dialogs-list::-webkit-scrollbar { width: 0; }
 }
