@@ -171,7 +171,9 @@ async function apiCall(url, method, body = null) {
 async function showApp() {
     try {
         const data = await apiCall('/api/me', 'GET');
-        currentUser = data.user; canPostToday = data.canPost;
+        currentUser = data.user;
+        currentUser.id = String(currentUser.id);
+        canPostToday = data.canPost;
         authBlock.classList.add('hidden'); appBlock.classList.remove('hidden');
         updateAllUI(); updateCreatePostUI(); loadFeed(); updateUnreadBadge();
         unreadInterval = setInterval(updateUnreadBadge, 5000);
@@ -204,7 +206,7 @@ async function loadFeed() {
             const timeStr = new Date(post.time).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
             const likeInfo = likesData[post.id] || { count: 0, liked: false };
             const avatarHtml = post.authorAvatar ? `<img src="${post.authorAvatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : post.author.charAt(0).toUpperCase();
-            const isMyPost = currentUser && post.userId === currentUser.id;
+            const isMyPost = currentUser && String(post.userId) === String(currentUser.id);
             const deleteBtnHtml = isMyPost ? `<button class="post-delete-btn" data-postid="${post.id}" title="Удалить">🗑️</button>` : '';
             div.innerHTML = `
                 <div class="post-header">
@@ -252,7 +254,7 @@ async function viewProfile(userId) {
         const joinedDate = new Date(user.createdAt).toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' });
         const safeName = user.username.replace(/'/g, "\\'");
         let msgBtn = '';
-        if (userId !== currentUser.id) msgBtn = `<button class="btn-msg" onclick="messageFromProfile('${userId}', '${safeName}')">💬 Написать</button>`;
+        if (String(userId) !== String(currentUser.id)) msgBtn = `<button class="btn-msg" onclick="messageFromProfile('${userId}', '${safeName}')">💬 Написать</button>`;
         const avatarHtml = user.avatarUrl ? `<div class="profile-avatar-wrapper"><img src="${user.avatarUrl}" alt="Аватар"></div>` : `<div class="profile-avatar-placeholder">${user.username.charAt(0).toUpperCase()}</div>`;
         const bioHtml = user.bio ? `<div class="profile-bio">${escapeHTML(user.bio)}</div>` : '';
         profilePage.innerHTML = `<div class="profile-card">${avatarHtml}<div class="profile-name">${escapeHTML(user.username)}</div>${bioHtml}<div class="profile-date">На сайте с ${joinedDate}</div><div class="profile-stats"><div><div class="stat-num">${user.totalPosts}</div><div class="stat-label">постов</div></div><div><div class="stat-num">🔥 ${user.streak}</div><div class="stat-label">дней подряд</div></div></div><div class="profile-btns">${msgBtn}<button class="btn-back-profile" onclick="goToFeed()">← Назад</button></div></div>`;
@@ -267,7 +269,7 @@ async function viewProfile(userId) {
                 const div = document.createElement('div'); div.className = 'post-card';
                 const timeStr = new Date(post.time).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
                 const likeInfo = likesData[post.id] || { count: 0, liked: false };
-                const isMyPost = currentUser && post.userId === currentUser.id;
+                const isMyPost = currentUser && String(post.userId) === String(currentUser.id);
                 const deleteBtnHtml = isMyPost ? `<button class="post-delete-btn" data-postid="${post.id}" title="Удалить">🗑️</button>` : '';
                 div.innerHTML = `<div class="post-body"><div class="post-text">${escapeHTML(post.content)}</div>${post.imageUrl ? `<img src="${post.imageUrl}" class="post-image" alt="Фото" loading="lazy">` : ''}<div class="post-time">${timeStr}</div></div><div class="post-footer" style="display:flex;align-items:center;justify-content:space-between;"><button class="like-btn ${likeInfo.liked ? 'liked' : ''}" data-postid="${post.id}"><span class="like-icon">${likeInfo.liked ? '❤️' : '🤍'}</span><span class="like-count">${likeInfo.count > 0 ? likeInfo.count : ''}</span></button>${deleteBtnHtml}</div>`;
                 const likeBtn = div.querySelector('.like-btn');
@@ -319,7 +321,7 @@ avatarInput.addEventListener('change', async () => {
 saveProfile.addEventListener('click', async () => {
     const username = settingsUsername.value.trim(); const bio = settingsBio.value.trim();
     if (username.length < 3) return alert('Имя минимум 3 символа');
-    try { const data = await apiCall('/api/settings', 'POST', { username, bio }); currentUser = data.user; updateAllUI(); showSuccess('Профиль сохранён!'); } catch (err) { alert('Ошибка: ' + err.message); }
+    try { const data = await apiCall('/api/settings', 'POST', { username, bio }); currentUser = data.user; currentUser.id = String(currentUser.id); updateAllUI(); showSuccess('Профиль сохранён!'); } catch (err) { alert('Ошибка: ' + err.message); }
 });
 savePassword.addEventListener('click', async () => {
     const password = settingsPassword.value.trim(); if (!password) return alert('Введите новый пароль'); if (password.length < 4) return alert('Пароль минимум 4 символа');
@@ -335,9 +337,9 @@ async function loadDialogs() {
         if (dialogs.length === 0) { dialogsList.innerHTML = '<div class="no-dialogs">Нет диалогов</div>'; }
         dialogs.forEach(dialog => {
             const div = document.createElement('div'); div.className = 'dialog-item';
-            if (currentChatPartner === dialog.userId) div.classList.add('active');
-            const time = new Date(dialog.lastTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-            div.innerHTML = `<div class="dialog-avatar">${dialog.avatarUrl ? `<img src="${dialog.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : dialog.username.charAt(0).toUpperCase()}</div><div class="dialog-info"><div class="dialog-name">${escapeHTML(dialog.username)}</div><div class="dialog-last">${escapeHTML(dialog.lastMessage.substring(0, 30))}</div></div><div class="dialog-meta"><div class="dialog-time">${time}</div>${dialog.unread > 0 ? `<div class="unread-badge">${dialog.unread}</div>` : ''}</div>`;
+            if (String(currentChatPartner) === String(dialog.userId)) div.classList.add('active');
+            const time = dialog.lastTime ? new Date(dialog.lastTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
+            div.innerHTML = `<div class="dialog-avatar">${dialog.avatarUrl ? `<img src="${dialog.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : dialog.username.charAt(0).toUpperCase()}</div><div class="dialog-info"><div class="dialog-name">${escapeHTML(dialog.username)}</div><div class="dialog-last">${escapeHTML((dialog.lastMessage || '').substring(0, 30))}</div></div><div class="dialog-meta"><div class="dialog-time">${time}</div>${dialog.unread > 0 ? `<div class="unread-badge">${dialog.unread}</div>` : ''}</div>`;
             div.addEventListener('click', () => openChat(dialog.userId, dialog.username));
             dialogsList.appendChild(div);
         });
@@ -351,12 +353,35 @@ searchUserInput.addEventListener('input', () => {
         try { const users = await apiCall('/api/users/search?q=' + encodeURIComponent(query), 'GET'); searchResults.classList.remove('hidden'); searchResults.innerHTML = ''; if (users.length === 0) searchResults.innerHTML = '<div class="search-result-item" style="color:#999;">Никого нет</div>'; users.forEach(user => { const div = document.createElement('div'); div.className = 'search-result-item'; div.textContent = '👤 ' + user.username; div.addEventListener('click', () => { openChat(user.id, user.username); searchUserInput.value = ''; searchResults.classList.add('hidden'); }); searchResults.appendChild(div); }); } catch (err) {}
     }, 300);
 });
-function openChat(userId, username) { currentChatPartner = userId; chatPartnerName.textContent = '💬 ' + username; messageInput.disabled = false; sendMessageBtn.disabled = false; loadMessages(); loadDialogs(); }
+function openChat(userId, username) { currentChatPartner = String(userId); chatPartnerName.textContent = '💬 ' + username; messageInput.disabled = false; sendMessageBtn.disabled = false; loadMessages(); loadDialogs(); }
 async function loadMessages() {
     if (!currentChatPartner) { chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог</div>'; return; }
-    try { const messages = await apiCall('/api/messages/' + currentChatPartner, 'GET'); chatMessages.innerHTML = ''; if (messages.length === 0) chatMessages.innerHTML = '<div class="chat-empty">Напишите первым! 👋</div>'; messages.forEach(msg => { const div = document.createElement('div'); div.className = 'message ' + (msg.from === currentUser.id ? 'message-sent' : 'message-received'); const time = new Date(msg.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); div.innerHTML = escapeHTML(msg.text) + '<div class="message-time">' + time + '</div>'; chatMessages.appendChild(div); }); chatMessages.scrollTop = chatMessages.scrollHeight; updateUnreadBadge(); } catch (err) {}
+    try {
+        const messages = await apiCall('/api/messages/' + currentChatPartner, 'GET');
+        chatMessages.innerHTML = '';
+        if (messages.length === 0) chatMessages.innerHTML = '<div class="chat-empty">Напишите первым! 👋</div>';
+        messages.forEach(msg => {
+            const div = document.createElement('div');
+            const isMyMessage = String(msg.from) === String(currentUser.id);
+            div.className = 'message ' + (isMyMessage ? 'message-sent' : 'message-received');
+            const time = new Date(msg.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            div.innerHTML = escapeHTML(msg.text) + '<div class="message-time">' + time + '</div>';
+            chatMessages.appendChild(div);
+        });
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        updateUnreadBadge();
+    } catch (err) {}
 }
-async function sendMsg() { const text = messageInput.value.trim(); if (!text || !currentChatPartner) return; try { await apiCall('/api/messages', 'POST', { to: currentChatPartner, text }); messageInput.value = ''; loadMessages(); loadDialogs(); } catch (err) { alert(err.message); } }
+async function sendMsg() {
+    const text = messageInput.value.trim();
+    if (!text || !currentChatPartner) return;
+    try {
+        await apiCall('/api/messages', 'POST', { to: currentChatPartner, text });
+        messageInput.value = '';
+        loadMessages();
+        loadDialogs();
+    } catch (err) { alert(err.message); }
+}
 sendMessageBtn.addEventListener('click', sendMsg);
 messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMsg(); });
 setInterval(() => { if (currentChatPartner && !messagesPage.classList.contains('hidden')) loadMessages(); }, 3000);
