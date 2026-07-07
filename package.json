@@ -1,0 +1,16 @@
+{
+  "name": "one-post",
+  "version": "1.0.0",
+  "description": "Соцсеть с одним постом в день",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "formidable": "^3.5.1"
+  }
+}

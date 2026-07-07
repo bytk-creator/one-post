@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Один Пост</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <div id="authBlock">
+        <div class="auth-card">
+            <div class="logo">📝</div>
+            <h1>Один Пост</h1>
+            <p class="subtitle">Одна мысль в день</p>
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="login">Вход</button>
+                <button class="tab-btn" data-tab="register">Регистрация</button>
+            </div>
+            <div id="loginForm">
+                <form id="loginFormEl">
+                    <div class="form-group"><input type="text" id="loginUsername" placeholder="Логин" required minlength="3"></div>
+                    <div class="form-group"><input type="password" id="loginPassword" placeholder="Пароль" required minlength="4"></div>
+                    <button type="submit" class="btn btn-primary">Войти</button>
+                    <div id="loginError" class="error-msg"></div>
+                </form>
+            </div>
+            <div id="registerForm" class="hidden">
+                <form id="registerFormEl">
+                    <div class="form-group"><input type="text" id="regUsername" placeholder="Придумайте логин" required minlength="3"></div>
+                    <div class="form-group"><input type="password" id="regPassword" placeholder="Придумайте пароль" required minlength="4"></div>
+                    <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
+                    <div id="registerError" class="error-msg"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="appBlock" class="hidden">
+        <div class="sidebar">
+            <div class="sidebar-logo">📝 Один Пост</div>
+            <nav class="sidebar-nav">
+                <button class="sidebar-btn active" data-page="feed"><span class="icon">🏠</span> Лента</button>
+                <button class="sidebar-btn" data-page="messages"><span class="icon">💬</span> Сообщения <span id="msgBadge" class="badge hidden">0</span></button>
+                <button class="sidebar-btn" data-page="settings"><span class="icon">⚙️</span> Настройки</button>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="sidebar-avatar" id="sidebarAvatar">?</div>
+                <div class="sidebar-user"><div class="sidebar-username" id="sidebarUsername">Пользователь</div></div>
+                <button class="sidebar-logout" id="logoutBtn" title="Выйти">🚪</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="content-wrapper">
+                <div id="feedPage">
+                    <div class="create-post">
+                        <div class="create-post-header">
+                            <div class="create-post-avatar" id="createPostAvatar">?</div>
+                            <div class="create-post-input" id="openPostModal">Что у вас нового?</div>
+                        </div>
+                    </div>
+                    <div id="feedContainer"></div>
+                </div>
+                <div id="profilePage" class="hidden"></div>
+                <div id="settingsPage" class="hidden">
+                    <div class="settings-page">
+                        <div id="settingsSuccess" class="settings-success hidden"></div>
+                        <div class="settings-card">
+                            <h3>🖼️ Аватар</h3>
+                            <div class="settings-avatar-area">
+                                <div id="settingsAvatarContainer"></div>
+                                <div><label class="settings-avatar-btn" for="avatarInput">📷 Загрузить фото</label><input type="file" id="avatarInput" style="display:none;" accept="image/*"></div>
+                            </div>
+                        </div>
+                        <div class="settings-card">
+                            <h3>👤 Профиль</h3>
+                            <div class="settings-field"><label>Имя пользователя</label><input type="text" id="settingsUsername" placeholder="Ваше имя"></div>
+                            <div class="settings-field"><label>О себе</label><textarea id="settingsBio" placeholder="Расскажите о себе..."></textarea><div class="hint">До 200 символов</div></div>
+                            <button class="btn-save" id="saveProfile">💾 Сохранить</button>
+                        </div>
+                        <div class="settings-card">
+                            <h3>🔒 Пароль</h3>
+                            <div class="settings-field"><label>Новый пароль</label><input type="password" id="settingsPassword" placeholder="Оставьте пустым, чтобы не менять"><div class="hint">Минимум 4 символа</div></div>
+                            <button class="btn-save" id="savePassword">🔐 Сменить пароль</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="messagesPage" class="hidden" style="width: 100%;">
+                <div class="messages-layout">
+                    <div class="dialogs-sidebar">
+                        <div class="dialogs-header">💬 Сообщения</div>
+                        <div class="search-chat"><input type="text" id="searchUserInput" placeholder="Поиск..."><div id="searchResults" class="search-results hidden"></div></div>
+                        <div class="dialogs-list" id="dialogsList"></div>
+                    </div>
+                    <div class="chat-area">
+                        <div class="chat-header" id="chatPartnerName">Выберите диалог</div>
+                        <div class="chat-messages" id="chatMessages"><div class="chat-empty">Выберите диалог или найдите пользователя</div></div>
+                        <div class="chat-input"><input type="text" id="messageInput" placeholder="Сообщение..." disabled><button id="sendMessageBtn" disabled>Отправить</button></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="postModal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3>Новый пост</h3>
+            <textarea id="postTextarea" placeholder="Что у вас на уме?"></textarea>
+            <div class="photo-upload-area">
+                <label class="photo-upload-label" for="photoInput" id="photoLabel">📷 Фото</label>
+                <input type="file" id="photoInput" class="photo-upload-input" accept="image/*">
+                <div id="photoPreview" class="photo-preview hidden"><img id="photoPreviewImg" src="" alt="Превью"><button class="remove-photo" id="removePhoto">✕</button></div>
+            </div>
+            <div id="postLimitWarning" class="limit-warning hidden">⚠️ Вы уже опубликовали пост сегодня. Приходите завтра!</div>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="closeModal">Отмена</button>
+                <button class="btn-submit" id="publishBtn">Опубликовать</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
