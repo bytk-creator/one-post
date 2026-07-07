@@ -1,0 +1,10 @@
+{
+  "name": "one-post-per-day",
+  "version": "1.0.0",
+  "description": "Соцсеть с одним постом в день",
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "compression": "^1.8.1",
+    "formidable": "^3.5.4"
+  }
+}
