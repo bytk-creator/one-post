@@ -55,6 +55,36 @@ const settingsSuccess = document.getElementById('settingsSuccess');
 const saveProfile = document.getElementById('saveProfile');
 const savePassword = document.getElementById('savePassword');
 
+const themeToggle = document.getElementById('themeToggle');
+
+// === ТЁМНАЯ ТЕМА ===
+function applyTheme(dark) {
+    if (dark) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        themeToggle.checked = true;
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        themeToggle.checked = false;
+    }
+}
+
+const savedTheme = localStorage.getItem('theme');
+if (savedTheme === 'dark') {
+    applyTheme(true);
+} else if (savedTheme === 'light') {
+    applyTheme(false);
+} else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    applyTheme(true);
+} else {
+    applyTheme(false);
+}
+
+themeToggle.addEventListener('change', () => {
+    const isDark = themeToggle.checked;
+    applyTheme(isDark);
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+});
+
 // === АВТОРИЗАЦИЯ ===
 tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
