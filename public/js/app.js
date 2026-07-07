@@ -112,7 +112,6 @@ document.getElementById('loginFormEl').addEventListener('submit', async (e) => {
 });
 
 logoutBtn.addEventListener('click', () => { token = ''; currentUser = null; localStorage.removeItem('token'); clearInterval(unreadInterval); authBlock.classList.remove('hidden'); appBlock.classList.add('hidden'); });
-
 logoutBtnMobile.addEventListener('click', () => { token = ''; currentUser = null; localStorage.removeItem('token'); clearInterval(unreadInterval); authBlock.classList.remove('hidden'); appBlock.classList.add('hidden'); });
 
 // === НАВИГАЦИЯ ===
@@ -121,7 +120,7 @@ sidebarBtns.forEach(btn => {
         sidebarBtns.forEach(b => b.classList.remove('active')); btn.classList.add('active');
         feedPage.classList.add('hidden'); profilePage.classList.add('hidden'); messagesPage.classList.add('hidden'); settingsPage.classList.add('hidden');
         const page = btn.dataset.page;
-        if (page === 'feed') feedPage.classList.remove('hidden');
+        if (page === 'feed') { feedPage.classList.remove('hidden'); }
         else if (page === 'messages') { messagesPage.classList.remove('hidden'); loadDialogs(); }
         else if (page === 'settings') { settingsPage.classList.remove('hidden'); loadSettings(); }
         dialogsSidebar.classList.remove('chat-open'); messagesLayout.classList.remove('mobile-view');
@@ -160,33 +159,45 @@ async function showApp() {
 function updateAllUI() { const a = currentUser.avatarUrl ? `<img src="${currentUser.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : currentUser.username.charAt(0).toUpperCase(); document.getElementById('sidebarAvatar').innerHTML = a; document.getElementById('createPostAvatar').innerHTML = a; document.getElementById('sidebarUsername').textContent = currentUser.username; }
 function updateCreatePostUI() { const i = document.getElementById('openPostModal'); if (canPostToday) { i.textContent = 'Что у вас нового?'; i.style.color = ''; } else { i.textContent = 'Вы уже опубликовали пост сегодня'; i.style.color = '#999'; } }
 
+function showSkeletons() {
+    feedContainer.innerHTML = '<div class="feed-title">Новости</div>' +
+        '<div class="skeleton skeleton-card"></div>'.repeat(3);
+}
+
 // === ЛЕНТА ===
 async function loadFeed() {
+    showSkeletons();
     try {
         const posts = await apiCall('/api/posts', 'GET');
-        if (!posts || !posts.length) { feedContainer.innerHTML = '<div class="empty-feed"><div class="icon">🐣</div><p>Лента пуста.</p></div>'; return; }
+        if (!posts || !posts.length) {
+            feedContainer.innerHTML = `<div class="empty-feed">
+                <div class="empty-icon"><svg viewBox="0 0 80 80" width="64" height="64"><rect x="12" y="16" width="56" height="48" rx="8" fill="none" stroke="currentColor" stroke-width="3"/><line x1="24" y1="32" x2="56" y2="32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="24" y1="42" x2="48" y2="42" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/><line x1="24" y1="52" x2="40" y2="52" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/></svg></div>
+                <h3>Лента пуста</h3><p>Здесь будут посты пользователей. Станьте первым!</p></div>`;
+            return;
+        }
         const ids = posts.map(p => p.id); const likesData = await apiCall('/api/likes', 'POST', { postIds: ids });
         feedContainer.innerHTML = '<div class="feed-title">Новости</div>';
-        posts.forEach(post => {
+        posts.forEach((post, index) => {
             const div = document.createElement('div'); div.className = 'post-card';
+            div.style.animationDelay = (index * 0.05) + 's';
             const ts = new Date(post.time).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
             const li = likesData[post.id] || { count: 0, liked: false };
             const av = post.authorAvatar ? `<img src="${post.authorAvatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : post.author.charAt(0).toUpperCase();
-            const del = (currentUser && String(post.userId) === String(currentUser.id)) ? `<button class="post-delete-btn" data-postid="${post.id}" title="Удалить"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6h14M10 11v6m4-6v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : '';
+            const del = (currentUser && String(post.userId) === String(currentUser.id)) ? `<button class="post-delete-btn" data-postid="${post.id}" title="Удалить"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6h14M10 11v6m4-6v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : '';
             div.innerHTML = `<div class="post-header"><div class="post-avatar" data-userid="${post.userId}">${av}</div><div class="post-author-info"><div class="post-author" data-userid="${post.userId}">${escapeHTML(post.author)}</div><div class="post-time">${ts}</div></div><div class="post-header-right">${del}</div></div><div class="post-body"><div class="post-text">${escapeHTML(post.content)}</div>${post.imageUrl ? `<img src="${post.imageUrl}" class="post-image" alt="Фото" loading="lazy">` : ''}</div><div class="post-footer"><button class="like-btn ${li.liked ? 'liked' : ''}" data-postid="${post.id}"><span class="like-icon">${li.liked ? '❤️' : '🤍'}</span><span class="like-count">${li.count > 0 ? li.count : ''}</span></button></div>`;
             div.querySelectorAll('[data-userid]').forEach(el => el.addEventListener('click', (e) => { if (!e.target.closest('.like-btn') && !e.target.closest('.post-delete-btn')) viewProfile(post.userId); }));
             const lb = div.querySelector('.like-btn'); lb.addEventListener('click', async () => { try { const r = await apiCall('/api/like', 'POST', { postId: post.id }); const ic = lb.querySelector('.like-icon'); const ct = lb.querySelector('.like-count'); if (r.liked) { lb.classList.add('liked', 'just-liked'); ic.textContent = '❤️'; setTimeout(() => lb.classList.remove('just-liked'), 400); } else { lb.classList.remove('liked'); ic.textContent = '🤍'; } ct.textContent = r.count > 0 ? r.count : ''; } catch (err) {} });
-            const db = div.querySelector('.post-delete-btn'); if (db) db.addEventListener('click', async () => { if (confirm('Удалить?')) { try { await apiCall('/api/post/' + post.id, 'DELETE'); loadFeed(); } catch (err) { alert(err.message); } } });
+            const db = div.querySelector('.post-delete-btn'); if (db) db.addEventListener('click', async () => { if (confirm('Удалить пост?')) { try { await apiCall('/api/post/' + post.id, 'DELETE'); loadFeed(); } catch (err) { alert(err.message); } } });
             feedContainer.appendChild(div);
         });
-    } catch (err) { feedContainer.innerHTML = '<div class="empty-feed">Ошибка загрузки</div>'; }
+    } catch (err) { feedContainer.innerHTML = '<div class="empty-feed"><h3>Ошибка загрузки</h3><p>Попробуйте обновить страницу</p></div>'; }
 }
 
 // === ПРОФИЛЬ ===
 async function viewProfile(userId) {
     viewingUserId = userId; sidebarBtns.forEach(b => b.classList.remove('active'));
     feedPage.classList.add('hidden'); messagesPage.classList.add('hidden'); settingsPage.classList.add('hidden'); profilePage.classList.remove('hidden');
-    profilePage.innerHTML = '';
+    profilePage.innerHTML = '<div class="skeleton" style="height:200px;border-radius:16px;margin-bottom:20px;"></div>';
     try {
         const user = await apiCall('/api/user/' + userId, 'GET');
         const jd = new Date(user.createdAt).toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -197,22 +208,23 @@ async function viewProfile(userId) {
         profilePage.innerHTML = `<div class="profile-card">${av}<div class="profile-name">${escapeHTML(user.username)}</div>${bio}<div class="profile-date">На сайте с ${jd}</div><div class="profile-stats"><div><div class="stat-num">${user.totalPosts}</div><div class="stat-label">постов</div></div><div><div class="stat-num">${user.streak}🔥</div><div class="stat-label">дней подряд</div></div></div><div class="profile-btns">${mb}<button class="btn-back-profile" onclick="goToFeed()">← Назад</button></div></div>`;
         const posts = await apiCall('/api/user/' + userId + '/posts', 'GET');
         const pc = document.createElement('div'); pc.className = 'profile-posts';
-        if (!posts || !posts.length) { pc.innerHTML = '<div class="empty-feed"><div class="icon">📭</div><p>У пользователя пока нет постов</p></div>'; }
-        else {
+        if (!posts || !posts.length) {
+            pc.innerHTML = `<div class="empty-feed"><div class="empty-icon"><svg viewBox="0 0 80 80" width="48" height="48"><rect x="16" y="20" width="48" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="3"/><line x1="28" y1="34" x2="52" y2="34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="28" y1="44" x2="44" y2="44" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><h3>Нет постов</h3><p>Пользователь пока ничего не опубликовал</p></div>`;
+        } else {
             const ids = posts.map(p => p.id); const likesData = await apiCall('/api/likes', 'POST', { postIds: ids });
             posts.forEach(post => {
                 const div = document.createElement('div'); div.className = 'post-card';
                 const ts = new Date(post.time).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
                 const li = likesData[post.id] || { count: 0, liked: false };
-                const del = (currentUser && String(post.userId) === String(currentUser.id)) ? `<button class="post-delete-btn" data-postid="${post.id}" title="Удалить"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6h14M10 11v6m4-6v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : '';
+                const del = (currentUser && String(post.userId) === String(currentUser.id)) ? `<button class="post-delete-btn" data-postid="${post.id}" title="Удалить"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6h14M10 11v6m4-6v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : '';
                 div.innerHTML = `<div class="post-body"><div class="post-text">${escapeHTML(post.content)}</div>${post.imageUrl ? `<img src="${post.imageUrl}" class="post-image" alt="Фото" loading="lazy">` : ''}<div class="post-time">${ts}</div></div><div class="post-footer" style="display:flex;align-items:center;justify-content:space-between;"><button class="like-btn ${li.liked ? 'liked' : ''}" data-postid="${post.id}"><span class="like-icon">${li.liked ? '❤️' : '🤍'}</span><span class="like-count">${li.count > 0 ? li.count : ''}</span></button>${del}</div>`;
                 const lb = div.querySelector('.like-btn'); lb.addEventListener('click', async () => { try { const r = await apiCall('/api/like', 'POST', { postId: post.id }); const ic = lb.querySelector('.like-icon'); const ct = lb.querySelector('.like-count'); if (r.liked) { lb.classList.add('liked', 'just-liked'); ic.textContent = '❤️'; setTimeout(() => lb.classList.remove('just-liked'), 400); } else { lb.classList.remove('liked'); ic.textContent = '🤍'; } ct.textContent = r.count > 0 ? r.count : ''; } catch (err) {} });
-                const db = div.querySelector('.post-delete-btn'); if (db) db.addEventListener('click', async () => { if (confirm('Удалить?')) { try { await apiCall('/api/post/' + post.id, 'DELETE'); viewProfile(userId); } catch (err) { alert(err.message); } } });
+                const db = div.querySelector('.post-delete-btn'); if (db) db.addEventListener('click', async () => { if (confirm('Удалить пост?')) { try { await apiCall('/api/post/' + post.id, 'DELETE'); viewProfile(userId); } catch (err) { alert(err.message); } } });
                 pc.appendChild(div);
             });
         }
         profilePage.appendChild(pc);
-    } catch (err) { profilePage.innerHTML = '<div class="empty-feed">Пользователь не найден</div>'; }
+    } catch (err) { profilePage.innerHTML = '<div class="empty-feed"><h3>Пользователь не найден</h3></div>'; }
 }
 
 function messageFromProfile(userId, username) {
@@ -247,26 +259,19 @@ let st; searchUserInput.addEventListener('input', () => { clearTimeout(st); cons
 
 function openChat(userId, username, avatarUrl) {
     currentChatPartner = String(userId);
-    // Обновляем заголовок чата: аватар + имя, кликабельно для перехода в профиль
     const av = avatarUrl ? `<img src="${avatarUrl}" class="chat-partner-avatar-img" alt="">` : `<div class="chat-partner-avatar-placeholder">${username.charAt(0).toUpperCase()}</div>`;
     chatPartnerText.innerHTML = `<span class="chat-partner-info" data-userid="${userId}" style="display:flex;align-items:center;gap:10px;cursor:pointer;">${av}<span>${escapeHTML(username)}</span></span>`;
-    // Клик по аватару/имени — переход в профиль
     const partnerInfo = chatPartnerText.querySelector('.chat-partner-info');
     if (partnerInfo) {
-        partnerInfo.addEventListener('click', (e) => {
-            e.stopPropagation();
-            viewProfile(userId);
-        });
+        partnerInfo.addEventListener('click', (e) => { e.stopPropagation(); viewProfile(userId); });
     }
-    messageInput.disabled = false;
-    sendMessageBtn.disabled = false;
-    loadMessages();
-    loadDialogs();
+    messageInput.disabled = false; sendMessageBtn.disabled = false;
+    loadMessages(); loadDialogs();
     if (window.innerWidth <= 768) { dialogsSidebar.classList.add('chat-open'); messagesLayout.classList.add('mobile-view'); }
 }
 
-chatBackBtn.addEventListener('click', () => { dialogsSidebar.classList.remove('chat-open'); messagesLayout.classList.remove('mobile-view'); currentChatPartner = null; chatPartnerText.innerHTML = 'Выберите диалог'; messageInput.disabled = true; sendMessageBtn.disabled = true; chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог или найдите пользователя</div>'; });
-async function loadMessages() { if (!currentChatPartner) { chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог</div>'; return; } try { const msgs = await apiCall('/api/messages/' + currentChatPartner, 'GET'); chatMessages.innerHTML = ''; if (!msgs.length) chatMessages.innerHTML = '<div class="chat-empty">Напишите первым!</div>'; msgs.forEach(m => { const div = document.createElement('div'); div.className = 'message ' + (String(m.from) === String(currentUser.id) ? 'message-sent' : 'message-received'); const t = new Date(m.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); div.innerHTML = escapeHTML(m.text) + '<div class="message-time">' + t + '</div>'; chatMessages.appendChild(div); }); chatMessages.scrollTop = chatMessages.scrollHeight; updateUnreadBadge(); } catch (err) {} }
+chatBackBtn.addEventListener('click', () => { dialogsSidebar.classList.remove('chat-open'); messagesLayout.classList.remove('mobile-view'); currentChatPartner = null; chatPartnerText.innerHTML = 'Выберите диалог'; messageInput.disabled = true; sendMessageBtn.disabled = true; chatMessages.innerHTML = '<div class="chat-empty"><div class="empty-chat-icon">💬</div>Выберите диалог или найдите пользователя</div>'; });
+async function loadMessages() { if (!currentChatPartner) { chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог</div>'; return; } try { const msgs = await apiCall('/api/messages/' + currentChatPartner, 'GET'); chatMessages.innerHTML = ''; if (!msgs.length) chatMessages.innerHTML = '<div class="chat-empty"><div class="empty-chat-icon">👋</div>Напишите первым!</div>'; msgs.forEach(m => { const div = document.createElement('div'); div.className = 'message ' + (String(m.from) === String(currentUser.id) ? 'message-sent' : 'message-received'); const t = new Date(m.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); div.innerHTML = escapeHTML(m.text) + '<div class="message-time">' + t + '</div>'; chatMessages.appendChild(div); }); chatMessages.scrollTop = chatMessages.scrollHeight; updateUnreadBadge(); } catch (err) {} }
 async function sendMsg() { const t = messageInput.value.trim(); if (!t || !currentChatPartner) return; try { await apiCall('/api/messages', 'POST', { to: currentChatPartner, text: t }); messageInput.value = ''; loadMessages(); loadDialogs(); } catch (err) { alert(err.message); } }
 sendMessageBtn.addEventListener('click', sendMsg); messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMsg(); });
 setInterval(() => { if (currentChatPartner && !messagesPage.classList.contains('hidden')) loadMessages(); }, 3000);
