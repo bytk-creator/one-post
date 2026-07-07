@@ -314,7 +314,19 @@ const server = http.createServer(async (req, res) => {
         const partnerId = url.split('/')[3];
         runSql('UPDATE messages SET read = 1 WHERE fromUserId = ? AND toUserId = ? AND read = 0', [partnerId, currentUser.id]);
         const messages = queryAll('SELECT messages.*, u1.username as fromUsername, u2.username as toUsername FROM messages JOIN users u1 ON messages.fromUserId = u1.id JOIN users u2 ON messages.toUserId = u2.id WHERE (fromUserId = ? AND toUserId = ?) OR (fromUserId = ? AND toUserId = ?) ORDER BY time ASC', [currentUser.id, partnerId, partnerId, currentUser.id]);
-        const fixed = messages.map(m => ({ ...m, from: String(m.from), to: String(m.to), fromUserId: String(m.fromUserId), toUserId: String(m.toUserId) }));
+        const fixed = messages.map(m => ({ 
+            ...m, 
+            id: String(m.id),
+            from: String(m.fromUserId), 
+            to: String(m.toUserId),
+            fromUserId: String(m.fromUserId),
+            toUserId: String(m.toUserId),
+            text: m.text,
+            time: m.time,
+            read: m.read,
+            fromUsername: m.fromUsername,
+            toUsername: m.toUsername
+        }));
         return serveJSON(res, fixed);
     }
 
