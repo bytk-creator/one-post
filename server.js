@@ -207,16 +207,11 @@ const server = http.createServer(async (req, res) => {
         return serveJSON(res, { success: true, token, user: { id: user.id, username: user.username } });
     }
 
-    if (url.startsWith('/api/users/search') && method === 'GET') {
+    if (url === '/api/me' && method === 'GET') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
-        const urlObj = new URL(url, 'http://localhost');
-        const q = (urlObj.searchParams.get('q') || '').trim();
-        if (!q) return serveJSON(res, []);
-        const users = queryAll(
-            'SELECT id, username, avatarUrl FROM users WHERE LOWER(username) LIKE LOWER(?) AND id != ? LIMIT 10',
-            ['%' + q + '%', currentUser.id]
-        );
-        return serveJSON(res, users.map(u => ({ id: String(u.id), username: u.username, avatarUrl: u.avatarUrl })));
+        const today = new Date().toISOString().split('T')[0];
+        const count = queryOne('SELECT COUNT(*) as count FROM posts WHERE userId = ? AND date = ?', [currentUser.id, today]);
+        return serveJSON(res, { user: { id: currentUser.id, username: currentUser.username, bio: currentUser.bio || '', avatarUrl: currentUser.avatarUrl, createdAt: currentUser.createdAt }, canPost: count.count === 0 });
     }
 
     if (url.match(/^\/api\/user\/[^/]+$/) && method === 'GET') {
@@ -411,7 +406,10 @@ const server = http.createServer(async (req, res) => {
         const urlObj = new URL(url, 'http://localhost');
         const q = (urlObj.searchParams.get('q') || '').trim();
         if (!q) return serveJSON(res, []);
-        const users = queryAll('SELECT id, username, avatarUrl FROM users WHERE username LIKE ? AND id != ? LIMIT 10', ['%' + q + '%', currentUser.id]);
+        const users = queryAll(
+            'SELECT id, username, avatarUrl FROM users WHERE LOWER(username) LIKE LOWER(?) AND id != ? LIMIT 10',
+            ['%' + q + '%', currentUser.id]
+        );
         return serveJSON(res, users.map(u => ({ id: String(u.id), username: u.username, avatarUrl: u.avatarUrl })));
     }
 
