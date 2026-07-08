@@ -19,7 +19,6 @@ const appBlock = document.getElementById('appBlock');
 const loginForm = document.getElementById('loginForm');
 const registerForm = document.getElementById('registerForm');
 const tabBtns = document.querySelectorAll('.tab-btn');
-const logoutBtn = document.getElementById('logoutBtn');
 const logoutBtnMobile = document.getElementById('logoutBtnMobile');
 const logoutBtnDesktop = document.getElementById('logoutBtnDesktop');
 const msgBadge = document.getElementById('msgBadge');
