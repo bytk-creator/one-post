@@ -27,17 +27,16 @@ async function apiCall(url, method, body = null) {
     return d;
 }
 
-// Сохраняем данные для app.js
+// Сохраняем данные до загрузки app.js
 window._pendingUser = null;
-window._authReady = false;
 
 function enterApp(user) {
-    authBlock.classList.add('hidden');
-    appBlock.classList.remove('hidden');
     if (typeof window.initApp === 'function') {
+        authBlock.classList.add('hidden');
+        appBlock.classList.remove('hidden');
         window.initApp(user);
     } else {
-        // app.js ещё не загрузился, сохраняем пользователя
+        // app.js ещё не загрузился — сохраняем и ждём
         window._pendingUser = user;
     }
 }
@@ -72,17 +71,12 @@ document.getElementById('loginFormEl').addEventListener('submit', async (e) => {
     }
 });
 
-window._authReady = true;
-
-// Если есть токен, проверяем его
+// Проверяем токен при загрузке
 if (token) {
-    (async () => {
-        try {
-            const d = await apiCall('/api/me', 'GET');
-            enterApp(d.user);
-        } catch (err) {
-            token = '';
-            localStorage.removeItem('token');
-        }
-    })();
+    apiCall('/api/me', 'GET').then(d => {
+        enterApp(d.user);
+    }).catch(() => {
+        token = '';
+        localStorage.removeItem('token');
+    });
 }
