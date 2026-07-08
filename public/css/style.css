@@ -218,6 +218,8 @@ input:checked + .theme-slider:before { transform: translateX(26px); }
 .chat-back-btn:hover { background: var(--border); }
 .chat-messages { flex: 1; overflow-y: auto; padding: 22px; display: flex; flex-direction: column; gap: 8px; background: var(--chat-bg); }
 .chat-empty { text-align: center; color: var(--text-tertiary); margin: auto; font-size: 15px; }
+.chat-empty .empty-icon { margin-bottom: 12px; }
+.chat-empty .empty-icon svg { opacity: 0.4; }
 .message { max-width: 72%; padding: 10px 16px; border-radius: 18px; font-size: 15px; line-height: 1.5; word-wrap: break-word; animation: fadeInUp 0.2s ease; }
 .message-sent { align-self: flex-end; background: var(--message-sent-bg); border-bottom-right-radius: 6px; }
 .message-received { align-self: flex-start; background: var(--message-received-bg); border: 1px solid var(--border); border-bottom-left-radius: 6px; }
