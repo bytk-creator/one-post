@@ -6,6 +6,7 @@ let viewingUserId = null;
 let canPostToday = true;
 let selectedPhoto = null;
 let chatPhoto = null;
+let lastMessagesHash = '';
 
 const authBlock = document.getElementById('authBlock');
 const appBlock = document.getElementById('appBlock');
@@ -265,6 +266,7 @@ let st; searchUserInput.addEventListener('input', () => { clearTimeout(st); cons
 
 function openChat(userId, username, avatarUrl) {
     currentChatPartner = String(userId);
+    lastMessagesHash = '';
     const av = avatarUrl ? `<img src="${avatarUrl}" class="chat-partner-avatar-img" alt="">` : `<div class="chat-partner-avatar-placeholder">${username.charAt(0).toUpperCase()}</div>`;
     chatPartnerText.innerHTML = `<span class="chat-partner-info" data-userid="${userId}" style="display:flex;align-items:center;gap:10px;cursor:pointer;">${av}<span>${escapeHTML(username)}</span></span>`;
     const partnerInfo = chatPartnerText.querySelector('.chat-partner-info');
@@ -272,12 +274,12 @@ function openChat(userId, username, avatarUrl) {
         partnerInfo.addEventListener('click', (e) => { e.stopPropagation(); viewProfile(userId); });
     }
     messageInput.disabled = false;
-    if (!chatPhoto) sendMessageBtn.disabled = true;
+    if (!chatPhoto && !messageInput.value.trim()) sendMessageBtn.disabled = true;
     loadMessages(); loadDialogs();
     if (window.innerWidth <= 768) { dialogsSidebar.classList.add('chat-open'); messagesLayout.classList.add('mobile-view'); }
 }
 
-chatBackBtn.addEventListener('click', () => { dialogsSidebar.classList.remove('chat-open'); messagesLayout.classList.remove('mobile-view'); currentChatPartner = null; chatPartnerText.innerHTML = 'Выберите диалог'; messageInput.disabled = true; sendMessageBtn.disabled = true; chatMessages.innerHTML = '<div class="chat-empty"><div class="empty-chat-icon">💬</div>Выберите диалог или найдите пользователя</div>'; });
+chatBackBtn.addEventListener('click', () => { dialogsSidebar.classList.remove('chat-open'); messagesLayout.classList.remove('mobile-view'); currentChatPartner = null; lastMessagesHash = ''; chatPartnerText.innerHTML = 'Выберите диалог'; messageInput.disabled = true; sendMessageBtn.disabled = true; chatMessages.innerHTML = '<div class="chat-empty"><div class="empty-chat-icon">💬</div>Выберите диалог или найдите пользователя</div>'; });
 
 messageInput.addEventListener('input', () => {
     if (messageInput.value.trim() || chatPhoto) {
@@ -287,7 +289,28 @@ messageInput.addEventListener('input', () => {
     }
 });
 
-async function loadMessages() { if (!currentChatPartner) { chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог</div>'; return; } try { const msgs = await apiCall('/api/messages/' + currentChatPartner, 'GET'); chatMessages.innerHTML = ''; if (!msgs.length) chatMessages.innerHTML = '<div class="chat-empty"><div class="empty-chat-icon">👋</div>Напишите первым!</div>'; msgs.forEach(m => { const div = document.createElement('div'); div.className = 'message ' + (String(m.from) === String(currentUser.id) ? 'message-sent' : 'message-received'); const t = new Date(m.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); const textHtml = m.text ? escapeHTML(m.text) : ''; const imgHtml = m.imageUrl ? `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">` : ''; div.innerHTML = (textHtml ? textHtml : '') + imgHtml + '<div class="message-time">' + t + '</div>'; chatMessages.appendChild(div); }); chatMessages.scrollTop = chatMessages.scrollHeight; updateUnreadBadge(); } catch (err) {} }
+async function loadMessages() {
+    if (!currentChatPartner) { chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог</div>'; return; }
+    try {
+        const msgs = await apiCall('/api/messages/' + currentChatPartner, 'GET');
+        const newHash = JSON.stringify(msgs);
+        if (newHash === lastMessagesHash) return;
+        lastMessagesHash = newHash;
+        chatMessages.innerHTML = '';
+        if (!msgs.length) chatMessages.innerHTML = '<div class="chat-empty"><div class="empty-chat-icon">👋</div>Напишите первым!</div>';
+        msgs.forEach(m => {
+            const div = document.createElement('div');
+            div.className = 'message ' + (String(m.from) === String(currentUser.id) ? 'message-sent' : 'message-received');
+            const t = new Date(m.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            const textHtml = m.text ? escapeHTML(m.text) : '';
+            const imgHtml = m.imageUrl ? `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">` : '';
+            div.innerHTML = (textHtml ? textHtml : '') + imgHtml + '<div class="message-time">' + t + '</div>';
+            chatMessages.appendChild(div);
+        });
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        updateUnreadBadge();
+    } catch (err) {}
+}
 
 async function sendMsg() {
     const t = messageInput.value.trim();
@@ -313,6 +336,7 @@ async function sendMsg() {
         chatPhotoInput.value = '';
         chatPhotoPreview.classList.add('hidden');
         if (!messageInput.value.trim()) sendMessageBtn.disabled = true;
+        lastMessagesHash = '';
         loadMessages();
         loadDialogs();
     } catch (err) { alert(err.message); }
