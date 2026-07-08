@@ -406,11 +406,9 @@ const server = http.createServer(async (req, res) => {
         const urlObj = new URL(url, 'http://localhost');
         const q = (urlObj.searchParams.get('q') || '').trim();
         if (!q) return serveJSON(res, []);
-        const users = queryAll(
-            'SELECT id, username, avatarUrl FROM users WHERE LOWER(username) LIKE LOWER(?) AND id != ? LIMIT 10',
-            ['%' + q + '%', currentUser.id]
-        );
-        return serveJSON(res, users.map(u => ({ id: String(u.id), username: u.username, avatarUrl: u.avatarUrl })));
+        const allUsers = queryAll('SELECT id, username, avatarUrl FROM users WHERE id != ?', [currentUser.id]);
+        const filtered = allUsers.filter(u => u.username.toLowerCase().includes(q.toLowerCase())).slice(0, 10);
+        return serveJSON(res, filtered.map(u => ({ id: String(u.id), username: u.username, avatarUrl: u.avatarUrl })));
     }
 
     if (url === '/api/unread' && method === 'GET') {
