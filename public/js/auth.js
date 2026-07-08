@@ -27,10 +27,19 @@ async function apiCall(url, method, body = null) {
     return d;
 }
 
+// Сохраняем данные для app.js
+window._pendingUser = null;
+window._authReady = false;
+
 function enterApp(user) {
     authBlock.classList.add('hidden');
     appBlock.classList.remove('hidden');
-    if (typeof window.initApp === 'function') window.initApp(user);
+    if (typeof window.initApp === 'function') {
+        window.initApp(user);
+    } else {
+        // app.js ещё не загрузился, сохраняем пользователя
+        window._pendingUser = user;
+    }
 }
 
 document.getElementById('registerFormEl').addEventListener('submit', async (e) => {
@@ -63,6 +72,9 @@ document.getElementById('loginFormEl').addEventListener('submit', async (e) => {
     }
 });
 
+window._authReady = true;
+
+// Если есть токен, проверяем его
 if (token) {
     (async () => {
         try {
