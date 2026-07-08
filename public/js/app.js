@@ -324,3 +324,9 @@ setInterval(() => { if (currentChatPartner && !messagesPage.classList.contains('
 setInterval(() => { if (!messagesPage.classList.contains('hidden')) loadDialogs(); }, 5000);
 
 function escapeHTML(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// Если auth.js уже проверил токен и сохранил пользователя
+if (window._pendingUser) {
+    window.initApp(window._pendingUser);
+    window._pendingUser = null;
+}
