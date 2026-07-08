@@ -27,6 +27,18 @@ async function apiCall(url, method, body = null) {
     return d;
 }
 
+function showAuth() {
+    authBlock.style.display = '';
+    authBlock.classList.remove('hidden');
+    appBlock.classList.add('hidden');
+}
+
+function hideAuth() {
+    authBlock.style.display = 'none';
+    authBlock.classList.add('hidden');
+    appBlock.classList.remove('hidden');
+}
+
 document.getElementById('registerFormEl').addEventListener('submit', async (e) => {
     e.preventDefault();
     const u = document.getElementById('regUsername').value.trim();
@@ -36,7 +48,8 @@ document.getElementById('registerFormEl').addEventListener('submit', async (e) =
         const d = await apiCall('/api/register', 'POST', { username: u, password: p });
         token = d.token;
         localStorage.setItem('token', token);
-        enterApp(d.user);
+        hideAuth();
+        if (typeof window.initApp === 'function') window.initApp(d.user);
     } catch (err) {
         document.getElementById('registerError').textContent = err.message;
     }
@@ -51,28 +64,26 @@ document.getElementById('loginFormEl').addEventListener('submit', async (e) => {
         const d = await apiCall('/api/login', 'POST', { username: u, password: p });
         token = d.token;
         localStorage.setItem('token', token);
-        enterApp(d.user);
+        hideAuth();
+        if (typeof window.initApp === 'function') window.initApp(d.user);
     } catch (err) {
         document.getElementById('loginError').textContent = err.message;
     }
 });
 
-function enterApp(user) {
-    authBlock.classList.add('hidden');
-    appBlock.classList.remove('hidden');
-    if (typeof window.initApp === 'function') {
-        window.initApp(user);
-    }
-}
-
+// Проверка токена при загрузке
 if (token) {
     (async () => {
         try {
             const d = await apiCall('/api/me', 'GET');
-            enterApp(d.user);
+            hideAuth();
+            if (typeof window.initApp === 'function') window.initApp(d.user);
         } catch (err) {
             token = '';
             localStorage.removeItem('token');
+            showAuth();
         }
     })();
+} else {
+    showAuth();
 }
