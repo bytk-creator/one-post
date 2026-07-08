@@ -325,8 +325,16 @@ setInterval(() => { if (!messagesPage.classList.contains('hidden')) loadDialogs(
 
 function escapeHTML(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-// Если auth.js уже проверил токен и сохранил пользователя
-if (window._pendingUser) {
-    window.initApp(window._pendingUser);
-    window._pendingUser = null;
-}
+// Проверяем токен при загрузке — app.js сам запускает приложение
+(function() {
+    const t = localStorage.getItem('token');
+    if (t) {
+        apiCall('/api/me', 'GET').then(d => {
+            authBlock.classList.add('hidden');
+            appBlock.classList.remove('hidden');
+            window.initApp(d.user);
+        }).catch(() => {
+            localStorage.removeItem('token');
+        });
+    }
+})();
