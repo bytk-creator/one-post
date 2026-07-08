@@ -404,9 +404,10 @@ const server = http.createServer(async (req, res) => {
     if (url.startsWith('/api/users/search') && method === 'GET') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
         const urlObj = new URL(url, 'http://localhost');
-        const query = urlObj.searchParams.get('q') || '';
-        const users = queryAll('SELECT id, username FROM users WHERE username LIKE ? AND id != ? LIMIT 10', ['%' + query + '%', currentUser.id]);
-        return serveJSON(res, users.map(u => ({ id: String(u.id), username: u.username })));
+        const q = (urlObj.searchParams.get('q') || '').trim();
+        if (!q) return serveJSON(res, []);
+        const users = queryAll('SELECT id, username, avatarUrl FROM users WHERE username LIKE ? AND id != ? LIMIT 10', ['%' + q + '%', currentUser.id]);
+        return serveJSON(res, users.map(u => ({ id: String(u.id), username: u.username, avatarUrl: u.avatarUrl })));
     }
 
     if (url === '/api/unread' && method === 'GET') {
