@@ -265,12 +265,11 @@ function showSuccess(msg) { settingsSuccess.textContent = '✅ ' + msg; settings
 
 async function updateUnreadBadge() { try { const d = await apiCall('/api/unread', 'GET'); if (d.count > 0) { msgBadge.textContent = d.count; msgBadge.classList.remove('hidden'); } else msgBadge.classList.add('hidden'); } catch (err) {} }
 async function loadDialogs() {
-    try { const dialogs = await apiCall('/api/dialogs', 'GET'); dialogsList.innerHTML = ''; if (!dialogs.length) { dialogsList.innerHTML = '<div class="no-dialogs">Нет диалогов</div>'; } dialogs.forEach(d => { const div = document.createElement('div'); div.className = 'dialog-item'; if (String(currentChatPartner) === String(d.userId)) div.classList.add('active'); const t = d.lastTime ? new Date(d.lastTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''; div.innerHTML = `<div class="dialog-avatar">${d.avatarUrl ? `<img src="${d.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" loading="lazy">` : d.username.charAt(0).toUpperCase()}</div><div class="dialog-info"><div class="dialog-name">${escapeHTML(d.username)}</div><div class="dialog-last">${escapeHTML((d.lastMessage || '').substring(0, 30))}</div></div><div class="dialog-meta"><div class="dialog-time">${t}</div>${d.unread > 0 ? `<div class="unread-badge">${d.unread}</div>` : ''}</div>`; div.addEventListener('click', () => openChat(d.userId, d.username, d.avatarUrl)); dialogsList.appendChild(div); }); } catch (err) {}
-}
+    try { const dialogs = await apiCall('/api/dialogs', 'GET'); dialogsList.innerHTML = ''; if (!dialogs.length) { dialogsList.innerHTML = '<div class="no-dialogs">Нет диалогов</div>'; } dialogs.forEach(d => { const div = document.createElement('div'); div.className = 'dialog-item'; if (String(currentChatPartner) === String(d.userId)) div.classList.add('active'); const t = d.lastTime ? new Date(d.lastTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''; div.innerHTML = `<div class="dialog-avatar">${d.avatarUrl ? `<img src="${d.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" loading="lazy">` : d.username.charAt(0).toUpperCase()}</div><div class="dialog-info"><div class="dialog-name">${escapeHTML(d.username)}</div><div class="dialog-last">${escapeHTML((d.lastMessage || '').substring(0, 30))}</div></div><div class="dialog-meta"><div class="dialog-time">${t}</div>${d.unread > 0 ? `<div class="unread-badge">${d.unread}</div>` : ''}</div>`; div.addEventListener('click', () => openChat(d.userId, d.username, d.avatarUrl)); dialogsList.appendChild(div); }); } catch (err) {} }
 let st; searchUserInput.addEventListener('input', () => { clearTimeout(st); const q = searchUserInput.value.trim(); if (!q) { searchResults.classList.add('hidden'); return; } st = setTimeout(async () => { try { const users = await apiCall('/api/users/search?q=' + encodeURIComponent(q), 'GET'); searchResults.classList.remove('hidden'); searchResults.innerHTML = ''; if (!users.length) searchResults.innerHTML = '<div class="search-result-item" style="color:var(--text-secondary);">Никого нет</div>'; users.forEach(u => { const div = document.createElement('div'); div.className = 'search-result-item'; div.textContent = '👤 ' + u.username; div.addEventListener('click', () => { openChat(u.id, u.username); searchUserInput.value = ''; searchResults.classList.add('hidden'); }); searchResults.appendChild(div); }); } catch (err) {} }, 300); });
 
 function openChat(userId, username, avatarUrl) {
-    currentChatPartner = String(userId); lastMessagesHash = ''; messagesHasMore = true;
+    currentChatPartner = String(userId); lastMessagesHash = ''; messagesHasMore = true; messagesLoading = false;
     const av = avatarUrl ? `<img src="${avatarUrl}" class="chat-partner-avatar-img" alt="" loading="lazy">` : `<div class="chat-partner-avatar-placeholder">${username.charAt(0).toUpperCase()}</div>`;
     chatPartnerText.innerHTML = `<span class="chat-partner-info" data-userid="${userId}" style="display:flex;align-items:center;gap:10px;cursor:pointer;">${av}<span>${escapeHTML(username)}</span></span>`;
     const partnerInfo = chatPartnerText.querySelector('.chat-partner-info');
@@ -305,6 +304,8 @@ async function loadMessages(before = null, prepend = false) {
         msgs.forEach(m => {
             const div = document.createElement('div');
             div.className = 'message ' + (String(m.from) === String(currentUser.id) ? 'message-sent' : 'message-received');
+            // Храним ISO-время в data-атрибуте для правильной подгрузки
+            div.dataset.msgTime = m.time;
             const t = new Date(m.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             div.innerHTML = (m.text ? escapeHTML(m.text) : '') + (m.imageUrl ? `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">` : '') + `<div class="message-time">${t}</div>`;
             frag.appendChild(div);
@@ -325,9 +326,8 @@ async function loadMessages(before = null, prepend = false) {
 chatMessages.addEventListener('scroll', () => {
     if (chatMessages.scrollTop < 100 && messagesHasMore && !messagesLoading) {
         const firstMsg = chatMessages.querySelector('.message');
-        if (firstMsg) {
-            const timeEl = firstMsg.querySelector('.message-time');
-            if (timeEl) loadMessages(timeEl.textContent, true);
+        if (firstMsg && firstMsg.dataset.msgTime) {
+            loadMessages(firstMsg.dataset.msgTime, true);
         }
     }
 });
