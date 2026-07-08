@@ -105,7 +105,6 @@ document.getElementById('loginFormEl').addEventListener('submit', async (e) => {
     try { const d = await apiCall('/api/login', 'POST', { username: u, password: p }); token = d.token; currentUser = d.user; currentUser.id = String(currentUser.id); localStorage.setItem('token', token); showApp(); } catch (err) { document.getElementById('loginError').textContent = err.message; }
 });
 
-logoutBtn.addEventListener('click', () => { token = ''; currentUser = null; localStorage.removeItem('token'); clearInterval(unreadInterval); authBlock.classList.remove('hidden'); appBlock.classList.add('hidden'); });
 logoutBtnMobile.addEventListener('click', () => { token = ''; currentUser = null; localStorage.removeItem('token'); clearInterval(unreadInterval); authBlock.classList.remove('hidden'); appBlock.classList.add('hidden'); });
 logoutBtnDesktop.addEventListener('click', () => { token = ''; currentUser = null; localStorage.removeItem('token'); clearInterval(unreadInterval); authBlock.classList.remove('hidden'); appBlock.classList.add('hidden'); });
 
