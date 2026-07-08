@@ -337,12 +337,7 @@ const server = http.createServer(async (req, res) => {
         
         let sql = 'SELECT messages.*, u1.username as fromUsername, u2.username as toUsername FROM messages JOIN users u1 ON messages.fromUserId = u1.id JOIN users u2 ON messages.toUserId = u2.id WHERE ((fromUserId = ? AND toUserId = ?) OR (fromUserId = ? AND toUserId = ?))';
         const sqlParams = [currentUser.id, partnerId, partnerId, currentUser.id];
-        
-        if (before) {
-            sql += ' AND messages.time < ?';
-            sqlParams.push(before);
-        }
-        
+        if (before) { sql += ' AND messages.time < ?'; sqlParams.push(before); }
         sql += ' ORDER BY messages.time DESC LIMIT 50';
         
         const messages = queryAll(sql, sqlParams).reverse();
@@ -350,12 +345,7 @@ const server = http.createServer(async (req, res) => {
         
         const fixed = messages.map(m => {
             const parsed = parseMsgText(m.text);
-            return { 
-                id: String(m.id), from: String(m.fromUserId), to: String(m.toUserId),
-                fromUserId: String(m.fromUserId), toUserId: String(m.toUserId),
-                text: parsed.text, imageUrl: parsed.imageUrl, time: m.time, read: m.read,
-                fromUsername: m.fromUsername, toUsername: m.toUsername
-            };
+            return { id: String(m.id), from: String(m.fromUserId), to: String(m.toUserId), fromUserId: String(m.fromUserId), toUserId: String(m.toUserId), text: parsed.text, imageUrl: parsed.imageUrl, time: m.time, read: m.read, fromUsername: m.fromUsername, toUsername: m.toUsername };
         });
         return serveJSON(res, { messages: fixed, hasMore });
     }
