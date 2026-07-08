@@ -86,8 +86,10 @@ function logout() {
     localStorage.removeItem('token');
     clearInterval(unreadInterval);
     appBlock.classList.add('hidden');
-    authBlock.classList.remove('hidden');
     currentUser = null;
+    // Показываем форму входа
+    authBlock.style.display = '';
+    authBlock.classList.remove('hidden');
 }
 
 logoutBtnMobile.addEventListener('click', logout);
