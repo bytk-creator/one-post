@@ -257,10 +257,24 @@ saveProfile.addEventListener('click', async () => { const u = settingsUsername.v
 savePassword.addEventListener('click', async () => { const p = settingsPassword.value.trim(); if (!p) return alert('Введите пароль'); if (p.length < 4) return alert('Минимум 4 символа'); try { await apiCall('/api/settings', 'POST', { password: p }); settingsPassword.value = ''; showSuccess('Пароль изменён!'); } catch (err) { alert(err.message); } });
 function showSuccess(msg) { settingsSuccess.textContent = '✅ ' + msg; settingsSuccess.classList.remove('hidden'); setTimeout(() => settingsSuccess.classList.add('hidden'), 3000); }
 
+// === ФОРМАТИРОВАНИЕ ПОСЛЕДНЕГО СООБЩЕНИЯ ===
+function formatLastMessage(msg) {
+    if (!msg) return '';
+    try {
+        const parsed = JSON.parse(msg);
+        if (parsed && typeof parsed === 'object' && parsed.imageUrl) {
+            return '📷 Фото';
+        }
+        return msg;
+    } catch (e) {
+        return msg;
+    }
+}
+
 // === СООБЩЕНИЯ ===
 async function updateUnreadBadge() { try { const d = await apiCall('/api/unread', 'GET'); if (d.count > 0) { msgBadge.textContent = d.count; msgBadge.classList.remove('hidden'); } else msgBadge.classList.add('hidden'); } catch (err) {} }
 async function loadDialogs() {
-    try { const dialogs = await apiCall('/api/dialogs', 'GET'); dialogsList.innerHTML = ''; if (!dialogs.length) { dialogsList.innerHTML = '<div class="no-dialogs">Нет диалогов</div>'; } dialogs.forEach(d => { const div = document.createElement('div'); div.className = 'dialog-item'; if (String(currentChatPartner) === String(d.userId)) div.classList.add('active'); const t = d.lastTime ? new Date(d.lastTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''; div.innerHTML = `<div class="dialog-avatar">${d.avatarUrl ? `<img src="${d.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : d.username.charAt(0).toUpperCase()}</div><div class="dialog-info"><div class="dialog-name">${escapeHTML(d.username)}</div><div class="dialog-last">${escapeHTML((d.lastMessage || '').substring(0, 30))}</div></div><div class="dialog-meta"><div class="dialog-time">${t}</div>${d.unread > 0 ? `<div class="unread-badge">${d.unread}</div>` : ''}</div>`; div.addEventListener('click', () => openChat(d.userId, d.username, d.avatarUrl)); dialogsList.appendChild(div); }); } catch (err) {}
+    try { const dialogs = await apiCall('/api/dialogs', 'GET'); dialogsList.innerHTML = ''; if (!dialogs.length) { dialogsList.innerHTML = '<div class="no-dialogs">Нет диалогов</div>'; } dialogs.forEach(d => { const div = document.createElement('div'); div.className = 'dialog-item'; if (String(currentChatPartner) === String(d.userId)) div.classList.add('active'); const t = d.lastTime ? new Date(d.lastTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''; div.innerHTML = `<div class="dialog-avatar">${d.avatarUrl ? `<img src="${d.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : d.username.charAt(0).toUpperCase()}</div><div class="dialog-info"><div class="dialog-name">${escapeHTML(d.username)}</div><div class="dialog-last">${escapeHTML(formatLastMessage(d.lastMessage || '').substring(0, 30))}</div></div><div class="dialog-meta"><div class="dialog-time">${t}</div>${d.unread > 0 ? `<div class="unread-badge">${d.unread}</div>` : ''}</div>`; div.addEventListener('click', () => openChat(d.userId, d.username, d.avatarUrl)); dialogsList.appendChild(div); }); } catch (err) {}
 }
 let st; searchUserInput.addEventListener('input', () => { clearTimeout(st); const q = searchUserInput.value.trim(); if (!q) { searchResults.classList.add('hidden'); return; } st = setTimeout(async () => { try { const users = await apiCall('/api/users/search?q=' + encodeURIComponent(q), 'GET'); searchResults.classList.remove('hidden'); searchResults.innerHTML = ''; if (!users.length) searchResults.innerHTML = '<div class="search-result-item" style="color:var(--text-secondary);">Никого нет</div>'; users.forEach(u => { const div = document.createElement('div'); div.className = 'search-result-item'; div.textContent = u.username; div.addEventListener('click', () => { openChat(u.id, u.username, null); searchUserInput.value = ''; searchResults.classList.add('hidden'); }); searchResults.appendChild(div); }); } catch (err) {} }, 300); });
 
