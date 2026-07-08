@@ -159,6 +159,23 @@ function parseMsgText(text) {
     } catch (e) { return { text, imageUrl: null }; }
 }
 
+// Генерация PWA-иконок
+(function generateIcons() {
+    [192, 512].forEach(size => {
+        const p = path.join(__dirname, 'public', `icon-${size}.svg`);
+        if (!fs.existsSync(p)) {
+            fs.writeFileSync(p, `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
+                <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7B8CFF"/><stop offset="100%" stop-color="#4F6EF7"/></linearGradient></defs>
+                <rect width="${size}" height="${size}" rx="${size/4}" fill="url(#g)"/>
+                <rect x="${size*0.22}" y="${size*0.28}" width="${size*0.56}" height="${size*0.44}" rx="${size*0.06}" fill="white" opacity="0.95"/>
+                <line x1="${size*0.3}" y1="${size*0.42}" x2="${size*0.7}" y2="${size*0.42}" stroke="#4F6EF7" stroke-width="${size*0.04}" stroke-linecap="round"/>
+                <line x1="${size*0.3}" y1="${size*0.53}" x2="${size*0.58}" y2="${size*0.53}" stroke="#7B8CFF" stroke-width="${size*0.03}" stroke-linecap="round"/>
+                <line x1="${size*0.3}" y1="${size*0.63}" x2="${size*0.48}" y2="${size*0.63}" stroke="#A5B4FC" stroke-width="${size*0.02}" stroke-linecap="round"/>
+            </svg>`);
+        }
+    });
+})();
+
 const server = http.createServer(async (req, res) => {
     const url = req.url.split('?')[0];
     const method = req.method;
@@ -245,7 +262,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (url === '/api/posts' && method === 'GET') {
-        const posts = queryAll('SELECT posts.*, users.username as author, users.avatarUrl as authorAvatar FROM posts JOIN users ON posts.userId = users.id ORDER BY posts.time DESC');
+        const page = parseInt((new URL(req.url, 'http://localhost').searchParams.get('page') || '1'));
+        const limit = 20;
+        const offset = (page - 1) * limit;
+        const posts = queryAll('SELECT posts.*, users.username as author, users.avatarUrl as authorAvatar FROM posts JOIN users ON posts.userId = users.id ORDER BY posts.time DESC LIMIT ? OFFSET ?', [limit, offset]);
         return serveJSON(res, posts);
     }
 
@@ -398,6 +418,9 @@ const server = http.createServer(async (req, res) => {
     if (url === '/' || url === '/index.html') return serveFile(res, 'public/index.html', 'text/html');
     if (url === '/css/style.css') return serveFile(res, 'public/css/style.css', 'text/css');
     if (url === '/js/app.js') return serveFile(res, 'public/js/app.js', 'application/javascript');
+    if (url === '/manifest.json') return serveFile(res, 'public/manifest.json', 'application/json');
+    if (url === '/service-worker.js') return serveFile(res, 'public/service-worker.js', 'application/javascript');
+    if (url.match(/^\/icon-\d+\.svg$/)) return serveFile(res, 'public' + url, 'image/svg+xml');
 
     res.writeHead(404);
     res.end('Not found');
