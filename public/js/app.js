@@ -9,6 +9,10 @@ let chatPhoto = null;
 let lastMessagesHash = '';
 let messagesHasMore = true;
 let messagesLoading = false;
+let feedPage = 1;
+let feedHasMore = true;
+let feedLoading = false;
+let feedObserver = null;
 
 const authBlock = document.getElementById('authBlock');
 const appBlock = document.getElementById('appBlock');
@@ -19,7 +23,7 @@ const logoutBtn = document.getElementById('logoutBtn');
 const logoutBtnMobile = document.getElementById('logoutBtnMobile');
 const msgBadge = document.getElementById('msgBadge');
 
-const feedPage = document.getElementById('feedPage');
+const feedPageEl = document.getElementById('feedPage');
 const profilePage = document.getElementById('profilePage');
 const messagesPage = document.getElementById('messagesPage');
 const settingsPage = document.getElementById('settingsPage');
@@ -107,9 +111,9 @@ logoutBtnMobile.addEventListener('click', () => { token = ''; currentUser = null
 sidebarBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         sidebarBtns.forEach(b => b.classList.remove('active')); btn.classList.add('active');
-        feedPage.classList.add('hidden'); profilePage.classList.add('hidden'); messagesPage.classList.add('hidden'); settingsPage.classList.add('hidden');
+        feedPageEl.classList.add('hidden'); profilePage.classList.add('hidden'); messagesPage.classList.add('hidden'); settingsPage.classList.add('hidden');
         const page = btn.dataset.page;
-        if (page === 'feed') feedPage.classList.remove('hidden');
+        if (page === 'feed') feedPageEl.classList.remove('hidden');
         else if (page === 'messages') { messagesPage.classList.remove('hidden'); loadDialogs(); }
         else if (page === 'settings') { settingsPage.classList.remove('hidden'); loadSettings(); }
         dialogsSidebar.classList.remove('chat-open'); messagesLayout.classList.remove('mobile-view');
@@ -129,7 +133,8 @@ publishBtn.addEventListener('click', async () => {
         const fd = new FormData(); fd.append('content', c); if (selectedPhoto) fd.append('image', selectedPhoto);
         const r = await fetch('/api/post', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
         const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Ошибка');
-        postTextarea.value = ''; postModal.classList.add('hidden'); clearPhoto(); canPostToday = false; updateCreatePostUI(); loadFeed();
+        postTextarea.value = ''; postModal.classList.add('hidden'); clearPhoto(); canPostToday = false; updateCreatePostUI();
+        feedPage = 1; feedHasMore = true; loadFeed();
     } catch (err) { alert(err.message); publishBtn.disabled = false; publishBtn.textContent = 'Опубликовать'; }
 });
 
@@ -145,43 +150,81 @@ async function showApp() {
 function updateAllUI() { const a = currentUser.avatarUrl ? `<img src="${currentUser.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : currentUser.username.charAt(0).toUpperCase(); document.getElementById('sidebarAvatar').innerHTML = a; document.getElementById('createPostAvatar').innerHTML = a; document.getElementById('sidebarUsername').textContent = currentUser.username; }
 function updateCreatePostUI() { const i = document.getElementById('openPostModal'); if (canPostToday) { i.textContent = 'Что у вас нового?'; i.style.color = '#818C99'; } else { i.textContent = 'Вы уже опубликовали пост сегодня'; i.style.color = '#999'; } }
 
-async function loadFeed() {
+function showSkeletons() {
+    feedContainer.innerHTML = '<div class="feed-title">Новости</div>' +
+        '<div class="skeleton skeleton-card"></div>'.repeat(3);
+}
+
+async function loadFeed(append = false) {
+    if (feedLoading) return;
+    feedLoading = true;
+    if (!append) showSkeletons();
     try {
-        const posts = await apiCall('/api/posts', 'GET');
-        if (!posts || !posts.length) { feedContainer.innerHTML = '<div class="empty-feed"><div class="empty-icon">🐣</div><h3>Лента пуста</h3><p>Станьте первым!</p></div>'; return; }
+        const posts = await apiCall('/api/posts?page=' + feedPage, 'GET');
+        if (!append) {
+            feedContainer.innerHTML = '<div class="feed-title">Новости</div>';
+            if (!posts || !posts.length) {
+                feedContainer.innerHTML = `<div class="empty-feed">
+                    <div class="empty-icon">
+                        <svg viewBox="0 0 80 80" width="64" height="64"><rect x="12" y="16" width="56" height="48" rx="8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><line x1="24" y1="32" x2="56" y2="32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="24" y1="42" x2="48" y2="42" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/></svg>
+                    </div>
+                    <h3>Лента пуста</h3><p>Здесь будут посты пользователей. Станьте первым!</p></div>`;
+                feedLoading = false; return;
+            }
+        }
+        if (!posts || !posts.length) { feedHasMore = false; feedLoading = false; return; }
         const ids = posts.map(p => p.id); const likesData = await apiCall('/api/likes', 'POST', { postIds: ids });
-        feedContainer.innerHTML = '<div class="feed-title">Новости</div>';
-        posts.forEach(post => {
+        posts.forEach((post, i) => {
             const div = document.createElement('div'); div.className = 'post-card';
+            if (!append) div.style.animationDelay = (i * 0.05) + 's';
             const ts = new Date(post.time).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
             const li = likesData[post.id] || { count: 0, liked: false };
-            const av = post.authorAvatar ? `<img src="${post.authorAvatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : post.author.charAt(0).toUpperCase();
+            const av = post.authorAvatar ? `<img src="${post.authorAvatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" loading="lazy">` : post.author.charAt(0).toUpperCase();
             const del = (currentUser && String(post.userId) === String(currentUser.id)) ? `<button class="post-delete-btn" data-postid="${post.id}" title="Удалить"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6h14M10 11v6m4-6v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : '';
             div.innerHTML = `<div class="post-header"><div class="post-avatar" data-userid="${post.userId}">${av}</div><div class="post-author-info"><div class="post-author" data-userid="${post.userId}">${escapeHTML(post.author)}</div><div class="post-time">${ts}</div></div><div class="post-header-right">${del}</div></div><div class="post-body"><div class="post-text">${escapeHTML(post.content)}</div>${post.imageUrl ? `<img src="${post.imageUrl}" class="post-image" alt="Фото" loading="lazy">` : ''}</div><div class="post-footer"><button class="like-btn ${li.liked ? 'liked' : ''}" data-postid="${post.id}"><span class="like-icon">${li.liked ? '❤️' : '🤍'}</span><span class="like-count">${li.count > 0 ? li.count : ''}</span></button></div>`;
             div.querySelectorAll('[data-userid]').forEach(el => el.addEventListener('click', (e) => { if (!e.target.closest('.like-btn') && !e.target.closest('.post-delete-btn')) viewProfile(post.userId); }));
             const lb = div.querySelector('.like-btn'); lb.addEventListener('click', async () => { try { const r = await apiCall('/api/like', 'POST', { postId: post.id }); const ic = lb.querySelector('.like-icon'); const ct = lb.querySelector('.like-count'); if (r.liked) { lb.classList.add('liked', 'just-liked'); ic.textContent = '❤️'; setTimeout(() => lb.classList.remove('just-liked'), 400); } else { lb.classList.remove('liked'); ic.textContent = '🤍'; } ct.textContent = r.count > 0 ? r.count : ''; } catch (err) {} });
-            const db = div.querySelector('.post-delete-btn'); if (db) db.addEventListener('click', async () => { if (confirm('Удалить?')) { try { await apiCall('/api/post/' + post.id, 'DELETE'); loadFeed(); } catch (err) { alert(err.message); } } });
+            const db = div.querySelector('.post-delete-btn'); if (db) db.addEventListener('click', async () => { if (confirm('Удалить пост?')) { try { await apiCall('/api/post/' + post.id, 'DELETE'); feedPage = 1; feedHasMore = true; loadFeed(); } catch (err) { alert(err.message); } } });
             feedContainer.appendChild(div);
         });
-    } catch (err) { feedContainer.innerHTML = '<div class="empty-feed"><h3>Ошибка загрузки</h3></div>'; }
+        feedPage++;
+        if (posts.length < 20) feedHasMore = false;
+        setupFeedObserver();
+    } catch (err) { if (!append) feedContainer.innerHTML = '<div class="empty-feed"><h3>Ошибка загрузки</h3><p>Попробуйте обновить страницу</p></div>'; }
+    feedLoading = false;
+}
+
+function setupFeedObserver() {
+    if (feedObserver) feedObserver.disconnect();
+    const sentinel = document.createElement('div');
+    sentinel.className = 'feed-sentinel';
+    sentinel.style.height = '1px';
+    feedContainer.appendChild(sentinel);
+    feedObserver = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && feedHasMore && !feedLoading) {
+            loadFeed(true);
+        }
+    }, { rootMargin: '200px' });
+    feedObserver.observe(sentinel);
 }
 
 async function viewProfile(userId) {
     viewingUserId = userId; sidebarBtns.forEach(b => b.classList.remove('active'));
-    feedPage.classList.add('hidden'); messagesPage.classList.add('hidden'); settingsPage.classList.add('hidden'); profilePage.classList.remove('hidden');
-    profilePage.innerHTML = '';
+    feedPageEl.classList.add('hidden'); messagesPage.classList.add('hidden'); settingsPage.classList.add('hidden'); profilePage.classList.remove('hidden');
+    profilePage.innerHTML = '<div class="skeleton" style="height:200px;border-radius:16px;margin-bottom:20px;"></div>';
     try {
         const user = await apiCall('/api/user/' + userId, 'GET');
         const jd = new Date(user.createdAt).toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' });
         const sn = user.username.replace(/'/g, "\\'");
         let mb = ''; if (String(userId) !== String(currentUser.id)) mb = `<button class="btn-msg" onclick="messageFromProfile('${userId}', '${sn}')">Написать</button>`;
-        const av = user.avatarUrl ? `<div class="profile-avatar-wrapper"><img src="${user.avatarUrl}" alt="Аватар"></div>` : `<div class="profile-avatar-placeholder">${user.username.charAt(0).toUpperCase()}</div>`;
+        const av = user.avatarUrl ? `<div class="profile-avatar-wrapper"><img src="${user.avatarUrl}" alt="Аватар" loading="lazy"></div>` : `<div class="profile-avatar-placeholder">${user.username.charAt(0).toUpperCase()}</div>`;
         const bio = user.bio ? `<div class="profile-bio">${escapeHTML(user.bio)}</div>` : '';
         profilePage.innerHTML = `<div class="profile-card">${av}<div class="profile-name">${escapeHTML(user.username)}</div>${bio}<div class="profile-date">На сайте с ${jd}</div><div class="profile-stats"><div><div class="stat-num">${user.totalPosts}</div><div class="stat-label">постов</div></div><div><div class="stat-num">${user.streak}🔥</div><div class="stat-label">дней подряд</div></div></div><div class="profile-btns">${mb}<button class="btn-back-profile" onclick="goToFeed()">← Назад</button></div></div>`;
         const posts = await apiCall('/api/user/' + userId + '/posts', 'GET');
         const pc = document.createElement('div'); pc.className = 'profile-posts';
-        if (!posts || !posts.length) { pc.innerHTML = '<div class="empty-feed"><h3>Нет постов</h3></div>'; }
-        else {
+        if (!posts || !posts.length) {
+            pc.innerHTML = `<div class="empty-feed"><div class="empty-icon"><svg viewBox="0 0 80 80" width="48" height="48"><rect x="16" y="20" width="48" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><line x1="28" y1="34" x2="52" y2="34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><h3>Нет постов</h3><p>Пользователь пока ничего не опубликовал</p></div>`;
+        } else {
             const ids = posts.map(p => p.id); const likesData = await apiCall('/api/likes', 'POST', { postIds: ids });
             posts.forEach(post => {
                 const div = document.createElement('div'); div.className = 'post-card';
@@ -190,7 +233,7 @@ async function viewProfile(userId) {
                 const del = (currentUser && String(post.userId) === String(currentUser.id)) ? `<button class="post-delete-btn" data-postid="${post.id}" title="Удалить"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6h14M10 11v6m4-6v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : '';
                 div.innerHTML = `<div class="post-body"><div class="post-text">${escapeHTML(post.content)}</div>${post.imageUrl ? `<img src="${post.imageUrl}" class="post-image" alt="Фото" loading="lazy">` : ''}<div class="post-time">${ts}</div></div><div class="post-footer" style="display:flex;align-items:center;justify-content:space-between;"><button class="like-btn ${li.liked ? 'liked' : ''}" data-postid="${post.id}"><span class="like-icon">${li.liked ? '❤️' : '🤍'}</span><span class="like-count">${li.count > 0 ? li.count : ''}</span></button>${del}</div>`;
                 const lb = div.querySelector('.like-btn'); lb.addEventListener('click', async () => { try { const r = await apiCall('/api/like', 'POST', { postId: post.id }); const ic = lb.querySelector('.like-icon'); const ct = lb.querySelector('.like-count'); if (r.liked) { lb.classList.add('liked', 'just-liked'); ic.textContent = '❤️'; setTimeout(() => lb.classList.remove('just-liked'), 400); } else { lb.classList.remove('liked'); ic.textContent = '🤍'; } ct.textContent = r.count > 0 ? r.count : ''; } catch (err) {} });
-                const db = div.querySelector('.post-delete-btn'); if (db) db.addEventListener('click', async () => { if (confirm('Удалить?')) { try { await apiCall('/api/post/' + post.id, 'DELETE'); viewProfile(userId); } catch (err) { alert(err.message); } } });
+                const db = div.querySelector('.post-delete-btn'); if (db) db.addEventListener('click', async () => { if (confirm('Удалить пост?')) { try { await apiCall('/api/post/' + post.id, 'DELETE'); viewProfile(userId); } catch (err) { alert(err.message); } } });
                 pc.appendChild(div);
             });
         }
@@ -201,7 +244,7 @@ async function viewProfile(userId) {
 function messageFromProfile(userId, username) {
     sidebarBtns.forEach(b => b.classList.remove('active'));
     document.querySelector('[data-page="messages"]').classList.add('active');
-    feedPage.classList.add('hidden'); profilePage.classList.add('hidden'); settingsPage.classList.add('hidden'); messagesPage.classList.remove('hidden');
+    feedPageEl.classList.add('hidden'); profilePage.classList.add('hidden'); settingsPage.classList.add('hidden'); messagesPage.classList.remove('hidden');
     openChat(userId, username); loadDialogs();
     if (window.innerWidth <= 768) { dialogsSidebar.classList.add('chat-open'); messagesLayout.classList.add('mobile-view'); }
 }
@@ -209,7 +252,7 @@ function messageFromProfile(userId, username) {
 function goToFeed() {
     sidebarBtns.forEach(b => b.classList.remove('active'));
     document.querySelector('[data-page="feed"]').classList.add('active');
-    feedPage.classList.remove('hidden'); profilePage.classList.add('hidden'); messagesPage.classList.add('hidden'); settingsPage.classList.add('hidden');
+    feedPageEl.classList.remove('hidden'); profilePage.classList.add('hidden'); messagesPage.classList.add('hidden'); settingsPage.classList.add('hidden');
     dialogsSidebar.classList.remove('chat-open'); messagesLayout.classList.remove('mobile-view');
 }
 
@@ -222,13 +265,13 @@ function showSuccess(msg) { settingsSuccess.textContent = '✅ ' + msg; settings
 
 async function updateUnreadBadge() { try { const d = await apiCall('/api/unread', 'GET'); if (d.count > 0) { msgBadge.textContent = d.count; msgBadge.classList.remove('hidden'); } else msgBadge.classList.add('hidden'); } catch (err) {} }
 async function loadDialogs() {
-    try { const dialogs = await apiCall('/api/dialogs', 'GET'); dialogsList.innerHTML = ''; if (!dialogs.length) { dialogsList.innerHTML = '<div class="no-dialogs">Нет диалогов</div>'; } dialogs.forEach(d => { const div = document.createElement('div'); div.className = 'dialog-item'; if (String(currentChatPartner) === String(d.userId)) div.classList.add('active'); const t = d.lastTime ? new Date(d.lastTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''; div.innerHTML = `<div class="dialog-avatar">${d.avatarUrl ? `<img src="${d.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : d.username.charAt(0).toUpperCase()}</div><div class="dialog-info"><div class="dialog-name">${escapeHTML(d.username)}</div><div class="dialog-last">${escapeHTML((d.lastMessage || '').substring(0, 30))}</div></div><div class="dialog-meta"><div class="dialog-time">${t}</div>${d.unread > 0 ? `<div class="unread-badge">${d.unread}</div>` : ''}</div>`; div.addEventListener('click', () => openChat(d.userId, d.username, d.avatarUrl)); dialogsList.appendChild(div); }); } catch (err) {}
+    try { const dialogs = await apiCall('/api/dialogs', 'GET'); dialogsList.innerHTML = ''; if (!dialogs.length) { dialogsList.innerHTML = '<div class="no-dialogs">Нет диалогов</div>'; } dialogs.forEach(d => { const div = document.createElement('div'); div.className = 'dialog-item'; if (String(currentChatPartner) === String(d.userId)) div.classList.add('active'); const t = d.lastTime ? new Date(d.lastTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''; div.innerHTML = `<div class="dialog-avatar">${d.avatarUrl ? `<img src="${d.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" loading="lazy">` : d.username.charAt(0).toUpperCase()}</div><div class="dialog-info"><div class="dialog-name">${escapeHTML(d.username)}</div><div class="dialog-last">${escapeHTML((d.lastMessage || '').substring(0, 30))}</div></div><div class="dialog-meta"><div class="dialog-time">${t}</div>${d.unread > 0 ? `<div class="unread-badge">${d.unread}</div>` : ''}</div>`; div.addEventListener('click', () => openChat(d.userId, d.username, d.avatarUrl)); dialogsList.appendChild(div); }); } catch (err) {}
 }
 let st; searchUserInput.addEventListener('input', () => { clearTimeout(st); const q = searchUserInput.value.trim(); if (!q) { searchResults.classList.add('hidden'); return; } st = setTimeout(async () => { try { const users = await apiCall('/api/users/search?q=' + encodeURIComponent(q), 'GET'); searchResults.classList.remove('hidden'); searchResults.innerHTML = ''; if (!users.length) searchResults.innerHTML = '<div class="search-result-item" style="color:var(--text-secondary);">Никого нет</div>'; users.forEach(u => { const div = document.createElement('div'); div.className = 'search-result-item'; div.textContent = '👤 ' + u.username; div.addEventListener('click', () => { openChat(u.id, u.username); searchUserInput.value = ''; searchResults.classList.add('hidden'); }); searchResults.appendChild(div); }); } catch (err) {} }, 300); });
 
 function openChat(userId, username, avatarUrl) {
     currentChatPartner = String(userId); lastMessagesHash = ''; messagesHasMore = true;
-    const av = avatarUrl ? `<img src="${avatarUrl}" class="chat-partner-avatar-img" alt="">` : `<div class="chat-partner-avatar-placeholder">${username.charAt(0).toUpperCase()}</div>`;
+    const av = avatarUrl ? `<img src="${avatarUrl}" class="chat-partner-avatar-img" alt="" loading="lazy">` : `<div class="chat-partner-avatar-placeholder">${username.charAt(0).toUpperCase()}</div>`;
     chatPartnerText.innerHTML = `<span class="chat-partner-info" data-userid="${userId}" style="display:flex;align-items:center;gap:10px;cursor:pointer;">${av}<span>${escapeHTML(username)}</span></span>`;
     const partnerInfo = chatPartnerText.querySelector('.chat-partner-info');
     if (partnerInfo) partnerInfo.addEventListener('click', (e) => { e.stopPropagation(); viewProfile(userId); });
