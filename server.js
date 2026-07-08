@@ -403,12 +403,8 @@ const server = http.createServer(async (req, res) => {
 
     if (url.startsWith('/api/users/search') && method === 'GET') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
-        const urlObj = new URL(url, 'http://localhost');
-        const q = (urlObj.searchParams.get('q') || '').trim();
-        if (!q) return serveJSON(res, []);
-        const allUsers = queryAll('SELECT id, username, avatarUrl FROM users WHERE id != ?', [currentUser.id]);
-        const filtered = allUsers.filter(u => u.username.toLowerCase().includes(q.toLowerCase())).slice(0, 10);
-        return serveJSON(res, filtered.map(u => ({ id: String(u.id), username: u.username, avatarUrl: u.avatarUrl })));
+        const users = queryAll('SELECT id, username, avatarUrl FROM users WHERE id != ? LIMIT 10', [currentUser.id]);
+        return serveJSON(res, users.map(u => ({ id: String(u.id), username: u.username, avatarUrl: u.avatarUrl })));
     }
 
     if (url === '/api/unread' && method === 'GET') {
