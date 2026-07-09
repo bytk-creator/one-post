@@ -4,7 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const formidable = require('formidable');
 const initSqlJs = require('sql.js');
-const { createWebSocketServer, clients, broadcastOnlineStatus } = require('./ws-server');
+const { createWebSocketServer, clients, broadcastOnlineStatus, setDb } = require('./ws-server');
 
 const DATA_DIR = path.join(__dirname, 'data');
 const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
@@ -50,6 +50,14 @@ async function initDb() {
     db.run(`CREATE INDEX IF NOT EXISTS idx_messages_from_to ON messages(fromUserId, toUserId)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_messages_time ON messages(time DESC)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_likes_postId ON likes(postId)`);
+    
+    // Передаём БД в WebSocket сервер
+    try {
+        setDb(db);
+        console.log('✅ БД передана в WebSocket сервер');
+    } catch (err) {
+        console.log('ℹ️ WebSocket не загружен');
+    }
     
     saveDb();
 }
