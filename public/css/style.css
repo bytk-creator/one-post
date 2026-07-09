@@ -711,22 +711,64 @@ input, textarea, select, button { font-size: 16px !important; }
     cursor: not-allowed;
 }
 
+/* ===== КНОПКА ЗАПИСИ ГОЛОСА ===== */
+.voice-message-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    border-radius: 50%;
+    border: none;
+    background: var(--primary-light, #EEF1FE);
+    color: var(--primary, #4F6EF7);
+    font-size: 20px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.25s ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+    z-index: 5;
+}
+
+.voice-message-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(79,110,247,0.2);
+}
+
+.voice-message-btn.recording {
+    background: #EF4444 !important;
+    color: white !important;
+    transform: scale(1.1);
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+    animation: voicePulse 0.8s infinite;
+}
+
+@keyframes voicePulse {
+    0%, 100% { transform: scale(1.1); }
+    50% { transform: scale(1.2); }
+}
+
 /* ===== ПЛЕЕР АУДИО ===== */
 .audio-message {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-width: 200px;
-    max-width: 280px;
+    min-width: 180px;
+    max-width: 260px;
     padding: 4px 0;
 }
 
 .audio-play-btn {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     border: none;
     border-radius: 50%;
-    background: var(--primary);
+    background: var(--primary, #4F6EF7);
     color: white;
     cursor: pointer;
     display: flex;
@@ -743,21 +785,21 @@ input, textarea, select, button { font-size: 16px !important; }
 }
 
 .audio-play-btn[data-playing="true"] {
-    background: var(--danger);
+    background: #EF4444;
 }
 
 .audio-progress {
     flex: 1;
     height: 4px;
-    background: var(--border);
+    background: var(--border, #E5E7EB);
     border-radius: 2px;
     overflow: hidden;
-    min-width: 60px;
+    min-width: 50px;
 }
 
 .audio-progress-bar {
     height: 100%;
-    background: var(--primary);
+    background: var(--primary, #4F6EF7);
     border-radius: 2px;
     transition: width 0.1s linear;
     width: 0%;
@@ -765,25 +807,18 @@ input, textarea, select, button { font-size: 16px !important; }
 
 .audio-time {
     font-size: 11px;
-    color: var(--text-tertiary);
+    color: var(--text-tertiary, #9CA3AF);
     flex-shrink: 0;
-    min-width: 32px;
+    min-width: 30px;
     text-align: right;
-}
-
-[data-theme="dark"] .audio-play-btn {
-    background: var(--primary);
-}
-
-[data-theme="dark"] .audio-progress {
-    background: var(--border);
 }
 
 /* ===== МОБИЛЬНАЯ АДАПТАЦИЯ ===== */
 @media (max-width: 768px) {
-    .chat-mic-btn {
-        width: 38px;
-        height: 38px;
+    .voice-message-btn {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
         font-size: 18px;
     }
     
@@ -796,9 +831,5 @@ input, textarea, select, button { font-size: 16px !important; }
         width: 30px;
         height: 30px;
         font-size: 12px;
-    }
-    
-    .recording-preview {
-        padding: 6px 10px;
     }
 }
