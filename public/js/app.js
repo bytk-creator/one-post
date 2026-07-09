@@ -15,6 +15,7 @@ let feedLoading = false;
 let feedObserver = null;
 let replyTo = null;
 let lastUnreadCount = 0;
+let notifiedMsgIds = new Set();
 
 const authBlock = document.getElementById('authBlock');
 const appBlock = document.getElementById('appBlock');
@@ -357,10 +358,25 @@ async function updateUnreadBadge() {
         msgBadge.classList.toggle('hidden', !d.count);
         if (d.count) msgBadge.textContent = d.count;
         
-        if (d.count > lastUnreadCount && !messagesPage.classList.contains('hidden')) {
-            showNotification('Новые сообщения', `У вас ${d.count} непрочитанных сообщений`, 'message');
+        if (d.count > 0) {
+            const dialogs = await apiCall('/api/dialogs', 'GET');
+            for (const dialog of dialogs) {
+                if (dialog.unread > 0) {
+                    const msgs = await apiCall('/api/messages/' + dialog.userId, 'GET');
+                    const unreadMsgs = msgs.messages.filter(m => 
+                        String(m.from) !== String(currentUser?.id) && !notifiedMsgIds.has(m.id)
+                    );
+                    for (const m of unreadMsgs) {
+                        notifiedMsgIds.add(m.id);
+                        showNotification(
+                            m.fromUsername || dialog.username,
+                            (m.text || '📷 Фото').substring(0, 100),
+                            'message'
+                        );
+                    }
+                }
+            }
         }
-        lastUnreadCount = d.count;
     } catch (err) {}
 }
 
@@ -456,7 +472,6 @@ async function loadMessages(before = null, prepend = false) {
         });
         if (prepend) { const oh = chatMessages.scrollHeight; chatMessages.insertBefore(frag, chatMessages.firstChild); chatMessages.scrollTop = chatMessages.scrollHeight - oh; }
         else { chatMessages.appendChild(frag); chatMessages.scrollTop = chatMessages.scrollHeight; }
-        updateUnreadBadge();
     } catch (err) {}
     messagesLoading = false;
 }
@@ -533,7 +548,7 @@ function showNotification(title, text, type = 'system') {
             notif.classList.add('removing');
             setTimeout(() => notif.remove(), 300);
         }
-    }, 4000);
+    }, 5000);
     
     const all = container.querySelectorAll('.notification');
     if (all.length > 3) {
