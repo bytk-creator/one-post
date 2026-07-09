@@ -44,7 +44,6 @@ async function initDb() {
         id TEXT PRIMARY KEY, fromUserId TEXT NOT NULL, toUserId TEXT NOT NULL,
         text TEXT NOT NULL, time TEXT NOT NULL, read INTEGER DEFAULT 0)`);
     
-    // FIX: Добавляем индексы для производительности
     db.run(`CREATE INDEX IF NOT EXISTS idx_posts_userId ON posts(userId)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_posts_time ON posts(time DESC)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_messages_from_to ON messages(fromUserId, toUserId)`);
@@ -76,7 +75,6 @@ function parseFormData(req) {
         });
         form.parse(req, (err, fields, files) => {
             if (err) { 
-                // FIX: Возвращаем ошибку вместо пустого объекта
                 resolve({ error: err.message, fields: {}, files: {} }); 
                 return; 
             }
@@ -154,13 +152,12 @@ function runSql(sql, params = []) {
     saveDb();
 }
 
-// FIX: Функция санитизации текста
 function sanitizeText(text, maxLength = 1000) {
     if (!text) return '';
     return text
         .trim()
-        .replace(/<[^>]*>/g, '') // Удаляем HTML теги
-        .replace(/javascript:/gi, '') // Удаляем javascript: протокол
+        .replace(/<[^>]*>/g, '')
+        .replace(/javascript:/gi, '')
         .substring(0, maxLength);
 }
 
@@ -196,6 +193,33 @@ function isOnline(lastSeen) {
     return (new Date() - new Date(lastSeen)) < 60000;
 }
 
+// ===== WEBSOCKET ИНТЕГРАЦИЯ =====
+let wsClients = new Map();
+let broadcastOnlineStatus = () => {};
+let sendMessageViaWS = () => false;
+
+try {
+    const wsModule = require('./ws-server');
+    wsClients = wsModule.clients || new Map();
+    broadcastOnlineStatus = wsModule.broadcastOnlineStatus || (() => {});
+    sendMessageViaWS = function(to, message) {
+        const targetWs = wsClients.get(String(to));
+        if (targetWs && targetWs.readyState === 1) {
+            try {
+                targetWs.send(JSON.stringify(message));
+                return true;
+            } catch (err) {
+                return false;
+            }
+        }
+        return false;
+    };
+    console.log('✅ WebSocket сервер интегрирован');
+} catch (err) {
+    console.log('ℹ️ WebSocket сервер не запущен');
+}
+
+// Генерация иконок
 (function generateIcons() {
     [192, 512].forEach(size => {
         const p = path.join(__dirname, 'public', `icon-${size}.svg`);
@@ -290,21 +314,18 @@ const server = http.createServer(async (req, res) => {
         const today = new Date().toISOString().split('T')[0];
         if (queryOne('SELECT COUNT(*) as count FROM posts WHERE userId = ? AND date = ?', [currentUser.id, today]).count > 0) return serveJSON(res, { error: 'Вы уже публиковали сегодня' }, 400);
         const result = await parseFormData(req);
-        // FIX: Проверяем ошибку парсинга
         if (result.error) return serveJSON(res, { error: 'Ошибка загрузки файла: ' + result.error }, 400);
         
         const { fields, files } = result;
         const content = fields.content || '';
         if (!content.trim()) return serveJSON(res, { error: 'Пост не может быть пустым' }, 400);
         
-        // FIX: Санитизация контента
         const sanitizedContent = sanitizeText(content, 1000);
         if (!sanitizedContent) return serveJSON(res, { error: 'Пост содержит недопустимые символы' }, 400);
         
         let imageUrl = null;
         if (files.image && files.image[0]) {
             const file = files.image[0];
-            // FIX: Проверка типа файла
             const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
             if (!allowedTypes.includes(file.mimetype)) {
                 return serveJSON(res, { error: 'Неподдерживаемый формат изображения' }, 400);
@@ -373,7 +394,6 @@ const server = http.createServer(async (req, res) => {
             
             if (files.avatar && files.avatar[0]) {
                 const file = files.avatar[0];
-                // FIX: Проверка типа файла
                 const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
                 if (!allowedTypes.includes(file.mimetype)) {
                     return serveJSON(res, { error: 'Неподдерживаемый формат изображения' }, 400);
@@ -388,7 +408,6 @@ const server = http.createServer(async (req, res) => {
             }
             if (files.cover && files.cover[0]) {
                 const file = files.cover[0];
-                // FIX: Проверка типа файла
                 const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
                 if (!allowedTypes.includes(file.mimetype)) {
                     return serveJSON(res, { error: 'Неподдерживаемый формат изображения' }, 400);
@@ -429,14 +448,12 @@ const server = http.createServer(async (req, res) => {
         return serveJSON(res, dialogs);
     }
 
-    // FIX: Полностью переписанный обработчик сообщений с правильной пагинацией
     if (url.startsWith('/api/messages/') && url !== '/api/messages/photo' && method === 'GET') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
         const partnerId = url.split('/')[3];
         const params = new URL(req.url, 'http://localhost').searchParams;
         const before = params.get('before');
         
-        // FIX: Проверка существования пользователя
         const targetUser = queryOne('SELECT id FROM users WHERE id = ?', [String(partnerId)]);
         if (!targetUser) return serveJSON(res, { error: 'Пользователь не найден' }, 404);
         
@@ -445,16 +462,15 @@ const server = http.createServer(async (req, res) => {
         let sql = 'SELECT messages.*, u1.username as fromUsername, u2.username as toUsername FROM messages JOIN users u1 ON messages.fromUserId = u1.id JOIN users u2 ON messages.toUserId = u2.id WHERE ((fromUserId = ? AND toUserId = ?) OR (fromUserId = ? AND toUserId = ?))';
         const sqlParams = [currentUser.id, partnerId, partnerId, currentUser.id];
         
-        // FIX: Правильная пагинация
         if (before) {
             sql += ' AND messages.time < ?';
             sqlParams.push(before);
         }
-        sql += ' ORDER BY messages.time DESC LIMIT 51'; // Запрашиваем 51 для проверки hasMore
+        sql += ' ORDER BY messages.time DESC LIMIT 51';
         
         const results = queryAll(sql, sqlParams);
         const hasMore = results.length > 50;
-        const messages = results.slice(0, 50).reverse(); // Берём 50 и переворачиваем
+        const messages = results.slice(0, 50).reverse();
         
         const fixed = messages.map(m => {
             const parsed = parseMsgText(m.text);
@@ -503,7 +519,6 @@ const server = http.createServer(async (req, res) => {
         
         if (!to) return serveJSON(res, { error: 'Получатель обязателен' }, 400);
         
-        // FIX: Проверка существования пользователя
         const targetUser = queryOne('SELECT id FROM users WHERE id = ?', [String(to)]);
         if (!targetUser) return serveJSON(res, { error: 'Пользователь не найден' }, 404);
         
@@ -512,7 +527,6 @@ const server = http.createServer(async (req, res) => {
         let imageUrl = null;
         if (files.image && files.image[0]) {
             const file = files.image[0];
-            // FIX: Проверка типа файла
             const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
             if (!allowedTypes.includes(file.mimetype)) {
                 return serveJSON(res, { error: 'Неподдерживаемый формат изображения' }, 400);
@@ -526,6 +540,24 @@ const server = http.createServer(async (req, res) => {
         const sanitizedText = sanitizeText(text, 2000);
         const storedText = JSON.stringify({ text: sanitizedText, imageUrl, replyTo, replyToText });
         runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, String(to), storedText, new Date().toISOString()]);
+        
+        // Отправка через WebSocket
+        sendMessageViaWS(to, {
+            type: 'new_message',
+            payload: {
+                id: msgId,
+                from: String(currentUser.id),
+                to: String(to),
+                text: sanitizedText || '',
+                imageUrl: imageUrl,
+                replyTo: replyTo || null,
+                replyToText: replyToText || null,
+                time: new Date().toISOString(),
+                read: 0,
+                fromUsername: currentUser.username
+            }
+        });
+        
         return serveJSON(res, { success: true, message: { id: msgId, from: String(currentUser.id), to: String(to), text: sanitizedText, imageUrl, replyTo, replyToText, fromUsername: currentUser.username } });
     }
 
@@ -534,7 +566,6 @@ const server = http.createServer(async (req, res) => {
         const { to, text, replyTo, replyToText } = await readBody(req);
         if (!to || !text || !text.trim()) return serveJSON(res, { error: 'Получатель и текст обязательны' }, 400);
         
-        // FIX: Проверка существования пользователя
         const targetUser = queryOne('SELECT id FROM users WHERE id = ?', [String(to)]);
         if (!targetUser) return serveJSON(res, { error: 'Пользователь не найден' }, 404);
         
@@ -545,6 +576,23 @@ const server = http.createServer(async (req, res) => {
         const sanitizedReplyText = replyToText ? sanitizeText(replyToText, 100) : null;
         const storedText = JSON.stringify({ text: sanitizedText, imageUrl: null, replyTo: replyTo || null, replyToText: sanitizedReplyText });
         runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, String(to), storedText, new Date().toISOString()]);
+        
+        // Отправка через WebSocket
+        sendMessageViaWS(to, {
+            type: 'new_message',
+            payload: {
+                id: msgId,
+                from: String(currentUser.id),
+                to: String(to),
+                text: sanitizedText,
+                replyTo: replyTo || null,
+                replyToText: sanitizedReplyText || null,
+                time: new Date().toISOString(),
+                read: 0,
+                fromUsername: currentUser.username
+            }
+        });
+        
         return serveJSON(res, { success: true, message: { id: msgId, from: String(currentUser.id), to: String(to), text: sanitizedText, replyTo, replyToText: sanitizedReplyText, fromUsername: currentUser.username } });
     }
 
@@ -581,10 +629,10 @@ const server = http.createServer(async (req, res) => {
 
 initDb().then(() => {
     const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => console.log('🚀 Сервер запущен на порту ' + PORT));
+    server.listen(PORT, '0.0.0.0', () => console.log('🚀 Сервер запущен на порту ' + PORT));
 });
 
-// FIX: Graceful shutdown
+// Graceful shutdown
 process.on('SIGTERM', () => {
     console.log('🛑 Получен SIGTERM, сохраняем БД...');
     saveDb();
