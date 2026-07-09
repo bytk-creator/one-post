@@ -9,4 +9,15 @@
     "sql.js": "^1.8.0",
     "ws": "^8.14.2"
   }
+}{
+  "name": "one-post",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "formidable": "^2.1.1",
+    "sql.js": "^1.8.0",
+    "ws": "^8.14.2"
+  }
 }
