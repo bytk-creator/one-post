@@ -66,7 +66,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .sidebar-collapse:hover { background: var(--border); color: var(--text); }
 .sidebar-collapse svg { transition: transform 0.3s ease; }
 
-/* Свёрнутая панель */
 .sidebar.collapsed { width: 60px; padding: 12px 6px; }
 .sidebar.collapsed .sidebar-logo { justify-content: center; padding: 6px 0; }
 .sidebar.collapsed .sidebar-logo svg { width: 24px; height: 24px; margin: 0 auto; }
@@ -163,7 +162,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .photo-preview .remove-photo { position: absolute; top: -8px; right: -8px; width: 26px; height: 26px; background: var(--danger); color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; font-weight: 700; box-shadow: var(--shadow-md); transition: all 0.15s ease; }
 .photo-preview .remove-photo:hover { background: var(--danger-hover); transform: scale(1.1); }
 
-.profile-card { background: var(--card); border-radius: var(--radius-lg); padding: 36px 28px; margin-bottom: 24px; text-align: center; border: 1px solid var(--border); box-shadow: var(--shadow); animation: fadeInUp 0.35s ease; }
+/* Обложка профиля */
+.profile-card { background: var(--card); border-radius: var(--radius-lg); margin-bottom: 24px; text-align: center; border: 1px solid var(--border); box-shadow: var(--shadow); animation: fadeInUp 0.35s ease; overflow: hidden; }
+.profile-cover { width: 100%; height: 200px; overflow: hidden; background: var(--avatar-gradient); }
+.profile-cover img { width: 100%; height: 100%; object-fit: cover; }
+.profile-avatar-section { margin-top: -44px; position: relative; z-index: 2; display: flex; justify-content: center; }
+.profile-avatar-section .profile-avatar-wrapper,
+.profile-avatar-section .profile-avatar-placeholder { border: 3px solid var(--card); box-shadow: var(--shadow-md); }
 .profile-avatar-wrapper { position: relative; width: 88px; height: 88px; margin: 0 auto 16px; }
 .profile-avatar-wrapper img { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; border: 3px solid var(--card); box-shadow: var(--shadow-md); }
 .profile-avatar-placeholder { width: 88px; height: 88px; border-radius: 50%; background: var(--avatar-gradient); color: white; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 700; margin: 0 auto 16px; box-shadow: 0 4px 16px rgba(79,110,247,0.35); }
@@ -189,6 +194,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .settings-avatar-placeholder { width: 76px; height: 76px; border-radius: 50%; background: var(--avatar-gradient); color: white; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700; box-shadow: 0 4px 16px rgba(79,110,247,0.35); }
 .settings-avatar-btn { padding: 10px 18px; background: var(--card-hover); border: none; border-radius: var(--radius); font-size: 14px; font-weight: 600; cursor: pointer; color: var(--text); transition: all 0.15s ease; }
 .settings-avatar-btn:hover { background: var(--border); }
+.settings-cover-area { margin-bottom: 12px; }
+.settings-cover-preview { width: 100%; height: 120px; border-radius: var(--radius); background: var(--card-hover); overflow: hidden; }
+.settings-cover-preview img { width: 100%; height: 100%; object-fit: cover; }
 .settings-field { margin-bottom: 16px; }
 .settings-field label { display: block; font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
 .settings-field input, .settings-field textarea { width: 100%; padding: 13px 16px; border: 2px solid var(--border); border-radius: var(--radius); font-size: 15px; font-family: inherit; background: var(--input-bg); color: var(--text); transition: all 0.2s ease; }
@@ -350,7 +358,8 @@ input:checked + .theme-slider:before { transform: translateX(26px); }
     .modal-actions { gap: 8px; }
     .btn-cancel, .btn-submit { padding: 14px 24px; font-size: 16px; }
 
-    .profile-card { border-radius: var(--radius-lg); padding: 28px 18px; }
+    .profile-cover { height: 140px; }
+    .profile-avatar-section { margin-top: -36px; }
     .profile-name { font-size: 22px; }
     .profile-stats { gap: 28px; }
     .stat-num { font-size: 24px; }
