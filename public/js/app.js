@@ -174,6 +174,7 @@ function logout() {
     authBlock.style.display = '';
     authBlock.classList.remove('hidden');
     currentUser = null;
+    history.pushState({}, '', '/');
 }
 logoutBtnMobile.addEventListener('click', logout);
 logoutBtnDesktop.addEventListener('click', logout);
@@ -192,7 +193,7 @@ async function startApp() {
     try {
         const d = await apiCall('/api/me', 'GET');
         currentUser = d.user; currentUser.id = String(currentUser.id); canPostToday = d.canPost;
-        updateAllUI(); updateCreatePostUI(); loadFeed(); updateUnreadBadge();
+        updateAllUI(); updateCreatePostUI();
         unreadInterval = setInterval(updateUnreadBadge, 5000);
         setInterval(() => { if (token) apiCall('/api/ping', 'POST').catch(() => {}); }, 30000);
         apiCall('/api/ping', 'POST').catch(() => {});
@@ -297,6 +298,7 @@ function onlineDot(online) {
 }
 
 async function viewProfile(userId) {
+    if (!currentUser) return;
     viewingUserId = userId;
     history.pushState({ page: 'profile' }, '', '/profile/' + userId);
     sidebarBtns.forEach(b => b.classList.remove('active'));
@@ -387,10 +389,10 @@ setInterval(() => { if (currentChatPartner && !messagesPage.classList.contains('
 setInterval(() => { if (!messagesPage.classList.contains('hidden')) loadDialogs(); }, 5000);
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
+// ========== РОУТИНГ ==========
 function navigateFromURL(page) {
     sidebarBtns.forEach(b => b.classList.remove('active'));
     
-    // Если это профиль (/profile/12345) — показываем feed как основу
     if (page.startsWith('profile/')) {
         const userId = page.split('/')[1];
         feedPageEl.classList.add('hidden');
@@ -419,6 +421,11 @@ function navigateFromURL(page) {
     messagesLayout.classList.remove('mobile-view');
 }
 
+window.addEventListener('popstate', () => {
+    const path = location.pathname.replace('/', '') || 'feed';
+    navigateFromURL(path);
+});
+
 (function() {
     const t = localStorage.getItem('token');
     if (t) {
@@ -426,7 +433,9 @@ function navigateFromURL(page) {
         apiCall('/api/me', 'GET').then(d => {
             enterApp(d.user);
             const path = location.pathname.replace('/', '') || 'feed';
-            setTimeout(() => navigateFromURL(path), 100);
+            if (path === 'feed' || path === 'messages' || path === 'settings' || path.startsWith('profile/')) {
+                setTimeout(() => navigateFromURL(path), 100);
+            }
         }).catch(() => {
             localStorage.removeItem('token'); token = '';
             authBlock.style.display = '';
