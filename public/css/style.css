@@ -664,3 +664,47 @@ input, textarea, select, button { font-size: 16px !important; }
     0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
     30% { transform: translateY(-8px); opacity: 1; }
 }
+
+/* ===== КНОПКА ОТПРАВКИ ===== */
+.send-btn {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    padding: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: none;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+}
+
+.send-btn-text {
+    background: var(--primary, #4F6EF7);
+    color: white;
+    box-shadow: 0 2px 8px rgba(79, 110, 247, 0.3);
+}
+
+.send-btn-text:hover {
+    background: var(--primary-hover, #3D56E0);
+    transform: scale(1.05);
+}
+
+.send-btn-voice {
+    background: var(--primary-light, #EEF1FE);
+    color: var(--primary, #4F6EF7);
+    font-size: 20px;
+}
+
+.send-btn-voice:hover {
+    background: var(--primary, #4F6EF7);
+    color: white;
+    transform: scale(1.05);
+}
