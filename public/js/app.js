@@ -445,10 +445,14 @@ async function loadMessages(before = null, prepend = false) {
         else { chatMessages.appendChild(frag); chatMessages.scrollTop = chatMessages.scrollHeight; }
         updateUnreadBadge();
         
-        if (msgs.length && !prepend && String(msgs[msgs.length-1].from) !== String(currentUser?.id) && document.visibilityState === 'visible') {
+        if (msgs.length && !prepend) {
             const last = msgs[msgs.length-1];
-            showNotification(last.fromUsername || 'Сообщение', last.text?.substring(0, 60) || '📷 Фото', 'message');
-        }
+            const isIncoming = String(last.from) !== String(currentUser?.id);
+            const isNew = !last.read && (new Date() - new Date(last.time)) < 10000;
+            if (isIncoming && isNew && document.visibilityState === 'visible') {
+                showNotification(last.fromUsername || 'Сообщение', last.text?.substring(0, 60) || '📷 Фото', 'message');
+    }
+}
     } catch (err) {}
     messagesLoading = false;
 }
