@@ -1,22 +1,28 @@
 {
     "name": "Один Пост",
     "short_name": "Один Пост",
+    "description": "Социальная сеть — одна мысль в день. Делитесь важным, общайтесь в чатах.",
     "start_url": "/",
+    "scope": "/",
     "display": "standalone",
+    "display_override": ["standalone", "minimal-ui"],
+    "orientation": "portrait-primary",
     "background_color": "#F0F2F5",
     "theme_color": "#4F6EF7",
+    "lang": "ru-RU",
+    "categories": ["social", "lifestyle"],
     "icons": [
         {
             "src": "/icon-192.svg",
             "sizes": "192x192",
             "type": "image/svg+xml",
-            "purpose": "any"
+            "purpose": "any maskable"
         },
         {
             "src": "/icon-512.svg",
             "sizes": "512x512",
             "type": "image/svg+xml",
-            "purpose": "any"
+            "purpose": "any maskable"
         }
     ]
 }
