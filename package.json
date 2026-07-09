@@ -2,9 +2,7 @@
   "name": "one-post",
   "version": "1.0.0",
   "scripts": {
-    "start": "node server.js",
-    "ws": "node ws-server.js",
-    "dev": "node server.js & node ws-server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "formidable": "^2.1.1",
