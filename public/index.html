@@ -90,47 +90,97 @@
                 <div id="settingsPage" class="hidden">
                     <div class="settings-page">
                         <div id="settingsSuccess" class="settings-success hidden"></div>
-                        <div class="settings-card">
-                            <h3>Оформление</h3>
-                            <div class="theme-toggle-row">
-                                <span>Тёмная тема</span>
-                                <label class="theme-switch">
-                                    <input type="checkbox" id="themeToggle">
-                                    <span class="theme-slider"></span>
-                                </label>
+                        
+                        <div class="settings-section">
+                            <div class="settings-section-title">Аккаунт</div>
+                            <div class="settings-card">
+                                <div class="settings-row">
+                                    <div class="settings-row-icon">
+                                        <svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 20c0-4 4-7 8-7s8 3 8 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                    </div>
+                                    <div class="settings-row-content">
+                                        <div class="settings-row-label">OneID</div>
+                                        <input type="text" id="settingsUsername" placeholder="Ваш OneID" class="settings-input">
+                                    </div>
+                                </div>
+                                <div class="settings-row">
+                                    <div class="settings-row-icon">
+                                        <svg viewBox="0 0 24 24" width="20" height="20"><rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="8" y1="10" x2="16" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="8" y1="14" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/></svg>
+                                    </div>
+                                    <div class="settings-row-content">
+                                        <div class="settings-row-label">О себе</div>
+                                        <textarea id="settingsBio" placeholder="Расскажите о себе..." class="settings-input"></textarea>
+                                        <div class="settings-hint">До 200 символов</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div class="settings-card">
-                            <h3>Обложка</h3>
-                            <div class="settings-cover-area" id="settingsCoverArea">
-                                <div id="settingsCoverPreview" class="settings-cover-preview"></div>
+
+                        <div class="settings-section">
+                            <div class="settings-section-title">Оформление</div>
+                            <div class="settings-card">
+                                <div class="settings-row">
+                                    <div class="settings-row-icon">
+                                        <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2l10 7-10 7-10-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12l10 7 10-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/></svg>
+                                    </div>
+                                    <div class="settings-row-content">
+                                        <div class="settings-row-label">Обложка профиля</div>
+                                        <div id="settingsCoverPreview" class="settings-cover-preview"></div>
+                                        <label class="settings-link" for="coverInput">Загрузить</label>
+                                        <input type="file" id="coverInput" style="display:none;" accept="image/*">
+                                    </div>
+                                </div>
+                                <div class="settings-row">
+                                    <div class="settings-row-icon">
+                                        <svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 18c2-3 4-5 7-5s5 2 7 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                    </div>
+                                    <div class="settings-row-content">
+                                        <div class="settings-row-label">Аватар</div>
+                                        <div class="settings-avatar-inline">
+                                            <div id="settingsAvatarContainer"></div>
+                                            <label class="settings-link" for="avatarInput">Загрузить фото</label>
+                                            <input type="file" id="avatarInput" style="display:none;" accept="image/*">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="settings-row">
+                                    <div class="settings-row-icon">
+                                        <svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 1v2m0 18v2M1 12h2m18 0h2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                    </div>
+                                    <div class="settings-row-content">
+                                        <div class="settings-row-label">Тёмная тема</div>
+                                    </div>
+                                    <label class="theme-switch">
+                                        <input type="checkbox" id="themeToggle">
+                                        <span class="theme-slider"></span>
+                                    </label>
+                                </div>
                             </div>
-                            <label class="settings-avatar-btn" for="coverInput">Загрузить обложку</label>
-                            <input type="file" id="coverInput" style="display:none;" accept="image/*">
                         </div>
-                        <div class="settings-card">
-                            <h3>Аватар</h3>
-                            <div class="settings-avatar-area">
-                                <div id="settingsAvatarContainer"></div>
-                                <div><label class="settings-avatar-btn" for="avatarInput">Загрузить фото</label><input type="file" id="avatarInput" style="display:none;" accept="image/*"></div>
+
+                        <div class="settings-section">
+                            <div class="settings-section-title">Безопасность</div>
+                            <div class="settings-card">
+                                <div class="settings-row">
+                                    <div class="settings-row-icon">
+                                        <svg viewBox="0 0 24 24" width="20" height="20"><rect x="3" y="11" width="18" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0110 0v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>
+                                    </div>
+                                    <div class="settings-row-content">
+                                        <div class="settings-row-label">Новый пароль</div>
+                                        <input type="password" id="settingsPassword" placeholder="Оставьте пустым" class="settings-input">
+                                        <div class="settings-hint">Минимум 4 символа</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div class="settings-card">
-                            <h3>Профиль</h3>
-                            <div class="settings-field"><label>OneID</label><input type="text" id="settingsUsername" placeholder="Ваш OneID"></div>
-                            <div class="settings-field"><label>О себе</label><textarea id="settingsBio" placeholder="Расскажите о себе..."></textarea><div class="hint">До 200 символов</div></div>
-                            <button class="btn-save" id="saveProfile">Сохранить</button>
-                        </div>
-                        <div class="settings-card">
-                            <h3>Пароль</h3>
-                            <div class="settings-field"><label>Новый пароль</label><input type="password" id="settingsPassword" placeholder="Оставьте пустым, чтобы не менять"><div class="hint">Минимум 4 символа</div></div>
-                            <button class="btn-save" id="savePassword">Сменить пароль</button>
-                        </div>
-                        <div class="settings-card mobile-logout-card">
-                            <button class="btn-logout-mobile" id="logoutBtnMobile">Выйти из аккаунта</button>
-                        </div>
-                        <div class="settings-card desktop-logout-card">
-                            <button class="btn-logout-desktop" id="logoutBtnDesktop">Выйти из аккаунта</button>
+
+                        <button class="btn-save" id="saveProfile">Сохранить изменения</button>
+
+                        <div class="settings-section">
+                            <div class="settings-card">
+                                <button class="btn-logout-desktop" id="logoutBtnDesktop">Выйти из аккаунта</button>
+                                <button class="btn-logout-mobile" id="logoutBtnMobile">Выйти из аккаунта</button>
+                            </div>
                         </div>
                     </div>
                 </div>
