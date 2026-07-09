@@ -23,6 +23,12 @@ let wsReconnectTimer = null;
 let typingTimer = null;
 let typingIndicatorEl = null;
 
+// ===== ГОЛОСОВЫЕ ПЕРЕМЕННЫЕ =====
+let isRecording = false;
+let mediaRecorder = null;
+let audioChunks = [];
+let voiceBtn = null;
+
 const authBlock = document.getElementById('authBlock');
 const appBlock = document.getElementById('appBlock');
 const loginForm = document.getElementById('loginForm');
@@ -219,6 +225,7 @@ async function startApp() {
         apiCall('/api/ping', 'POST').catch(() => {});
         
         setTimeout(() => connectWebSocket(), 1000);
+        setTimeout(createVoiceButton, 1500);
     } catch (err) { logout(); }
 }
 
@@ -480,6 +487,9 @@ function openChat(uid, un, avUrl) {
             });
         }
     }, 100);
+    
+    // ===== ДОБАВЛЯЕМ КНОПКУ ГОЛОСОВОГО =====
+    setTimeout(createVoiceButton, 200);
 }
 
 function closeChat() {
@@ -493,7 +503,6 @@ function closeChat() {
     chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог или найдите пользователя</div>';
     if (chatCloseBtn) chatCloseBtn.style.display = 'none';
     
-    // ===== ОЧИЩАЕМ ИНДИКАТОР ПРИ ЗАКРЫТИИ ЧАТА =====
     if (typingIndicatorEl) {
         typingIndicatorEl.remove();
         typingIndicatorEl = null;
@@ -535,8 +544,16 @@ async function loadMessages(before = null, prepend = false) {
                 const replyText = m.replyToText || 'Сообщение';
                 inner += `<div class="message-reply" data-msgid="${m.replyTo}">↩ ${esc(replyText.substring(0, 50))}</div>`;
             }
-            inner += (m.text ? esc(m.text) : '');
-            inner += (m.imageUrl ? `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">` : '');
+            
+            // ===== АУДИО-СООБЩЕНИЕ =====
+            if (m.audioUrl) {
+                inner += createAudioPlayerHTML(m.audioUrl, m.duration || 0);
+            } else {
+                inner += (m.text ? esc(m.text) : '');
+                if (m.imageUrl) {
+                    inner += `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">`;
+                }
+            }
             
             let checkmark = '';
             if (String(m.from) === String(currentUser.id)) {
@@ -549,6 +566,16 @@ async function loadMessages(before = null, prepend = false) {
             inner += `<div class="message-time">${t}${checkmark}</div>`;
             
             div.innerHTML = inner;
+            
+            // ===== ИНИЦИАЛИЗАЦИЯ АУДИО-ПЛЕЕРА =====
+            if (m.audioUrl) {
+                const playBtn = div.querySelector('.audio-play-btn');
+                const progressBar = div.querySelector('.audio-progress-bar');
+                const timeDisplay = div.querySelector('.audio-time');
+                if (playBtn && progressBar && timeDisplay) {
+                    initAudioPlayer(playBtn, progressBar, timeDisplay, m.audioUrl, m.duration || 0);
+                }
+            }
             
             div.querySelector('.message-reply')?.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -827,9 +854,14 @@ function addMessageToChat(msg) {
         const replyText = msg.replyToText || 'Сообщение';
         inner += `<div class="message-reply" data-msgid="${msg.replyTo}">↩ ${esc(replyText.substring(0, 50))}</div>`;
     }
-    inner += (msg.text ? esc(msg.text) : '');
-    if (msg.imageUrl) {
-        inner += `<img src="${msg.imageUrl}" class="message-image" alt="Фото" loading="lazy">`;
+    
+    if (msg.audioUrl) {
+        inner += createAudioPlayerHTML(msg.audioUrl, msg.duration || 0);
+    } else {
+        inner += (msg.text ? esc(msg.text) : '');
+        if (msg.imageUrl) {
+            inner += `<img src="${msg.imageUrl}" class="message-image" alt="Фото" loading="lazy">`;
+        }
     }
     
     let checkmark = '';
@@ -843,6 +875,15 @@ function addMessageToChat(msg) {
     inner += `<div class="message-time">${t}${checkmark}</div>`;
     
     div.innerHTML = inner;
+    
+    if (msg.audioUrl) {
+        const playBtn = div.querySelector('.audio-play-btn');
+        const progressBar = div.querySelector('.audio-progress-bar');
+        const timeDisplay = div.querySelector('.audio-time');
+        if (playBtn && progressBar && timeDisplay) {
+            initAudioPlayer(playBtn, progressBar, timeDisplay, msg.audioUrl, msg.duration || 0);
+        }
+    }
     
     div.querySelector('.message-reply')?.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -858,7 +899,6 @@ function showTypingIndicator(from, isTyping) {
     console.log('🟣 showTypingIndicator ВЫЗВАН:', from, isTyping);
     console.log('🟣 currentChatPartner:', currentChatPartner);
     
-    // ===== ПОКАЗЫВАЕМ ТОЛЬКО ЕСЛИ ЧАТ ОТКРЫТ =====
     if (!currentChatPartner || String(currentChatPartner) !== String(from)) {
         console.log('🟣 Чат с этим пользователем не открыт, игнорируем');
         return;
@@ -870,24 +910,17 @@ function showTypingIndicator(from, isTyping) {
         return;
     }
     
-    console.log('🟣 chatMessages найден, isTyping:', isTyping);
-    
     if (isTyping) {
         if (!typingIndicatorEl) {
-            console.log('🟣 СОЗДАЁМ ИНДИКАТОР');
             typingIndicatorEl = document.createElement('div');
             typingIndicatorEl.id = 'typingIndicator';
             typingIndicatorEl.className = 'typing-indicator';
             typingIndicatorEl.innerHTML = 'печатает<span class="typing-dots"><span></span><span></span><span></span></span>';
             chatMessagesEl.appendChild(typingIndicatorEl);
             chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-            console.log('🟣 ИНДИКАТОР ДОБАВЛЕН В DOM');
-        } else {
-            console.log('🟣 Индикатор уже существует');
         }
     } else {
         if (typingIndicatorEl) {
-            console.log('🟣 УДАЛЯЕМ ИНДИКАТОР');
             typingIndicatorEl.remove();
             typingIndicatorEl = null;
         }
@@ -949,7 +982,331 @@ function sendTypingStatus(isTyping) {
     sendTypingWithRetry(isTyping);
 }
 
-// Дополнительная инициализация
+// ===== АУДИО-ПЛЕЕР =====
+function createAudioPlayerHTML(audioUrl, duration) {
+    return `
+        <div class="audio-message">
+            <button class="audio-play-btn" data-playing="false">▶</button>
+            <div class="audio-progress">
+                <div class="audio-progress-bar" style="width:0%"></div>
+            </div>
+            <span class="audio-time">${formatDuration(duration)}</span>
+        </div>
+    `;
+}
+
+function initAudioPlayer(playBtn, progressBar, timeDisplay, audioUrl, duration) {
+    let audio = null;
+    let isPlaying = false;
+    let progressInterval = null;
+    
+    playBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        
+        if (!audio) {
+            audio = new Audio(audioUrl);
+            audio.addEventListener('ended', function() {
+                stopPlayback();
+            });
+            audio.addEventListener('timeupdate', function() {
+                if (audio.duration) {
+                    const percent = (audio.currentTime / audio.duration) * 100;
+                    progressBar.style.width = Math.min(percent, 100) + '%';
+                    const remaining = Math.max(0, audio.duration - audio.currentTime);
+                    timeDisplay.textContent = formatDuration(Math.round(remaining));
+                }
+            });
+            audio.addEventListener('error', function(e) {
+                console.error('❌ Ошибка аудио:', e);
+                stopPlayback();
+            });
+        }
+        
+        if (isPlaying) {
+            stopPlayback();
+        } else {
+            startPlayback();
+        }
+    });
+    
+    function startPlayback() {
+        if (!audio) return;
+        audio.play().catch(function(err) {
+            console.error('❌ Ошибка воспроизведения:', err);
+        });
+        isPlaying = true;
+        playBtn.textContent = '⏸';
+        playBtn.dataset.playing = 'true';
+        
+        progressInterval = setInterval(function() {
+            if (audio.duration) {
+                const remaining = Math.max(0, audio.duration - audio.currentTime);
+                timeDisplay.textContent = formatDuration(Math.round(remaining));
+            }
+        }, 200);
+    }
+    
+    function stopPlayback() {
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+        }
+        isPlaying = false;
+        playBtn.textContent = '▶';
+        playBtn.dataset.playing = 'false';
+        progressBar.style.width = '0%';
+        timeDisplay.textContent = formatDuration(duration || 0);
+        if (progressInterval) {
+            clearInterval(progressInterval);
+            progressInterval = null;
+        }
+    }
+}
+
+function formatDuration(seconds) {
+    if (!seconds || seconds < 0) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return mins + ':' + String(secs).padStart(2, '0');
+}
+
+// ===== ГОЛОСОВЫЕ СООБЩЕНИЯ (ЗАПИСЬ) =====
+function createVoiceButton() {
+    const chatInput = document.querySelector('.chat-input');
+    if (!chatInput) {
+        setTimeout(createVoiceButton, 1000);
+        return;
+    }
+    
+    document.querySelectorAll('#voiceBtnFinal, #micBtn, #micBtnUniversal, #micBtnMobile').forEach(el => el.remove());
+    
+    voiceBtn = document.createElement('button');
+    voiceBtn.id = 'voiceBtnFinal';
+    voiceBtn.textContent = '🎙';
+    voiceBtn.type = 'button';
+    voiceBtn.style.cssText = `
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        border-radius: 50%;
+        border: none;
+        background: #EEF1FE;
+        color: #4F6EF7;
+        font-size: 20px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: all 0.25s ease;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+        -webkit-user-select: none;
+        margin-right: 4px;
+    `;
+    
+    const messageInput = document.getElementById('messageInput');
+    if (messageInput) {
+        chatInput.insertBefore(voiceBtn, messageInput);
+    } else {
+        chatInput.appendChild(voiceBtn);
+    }
+    
+    console.log('✅ Кнопка микрофона создана');
+    
+    voiceBtn.addEventListener('click', handleVoiceClick);
+    voiceBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        handleVoiceClick.call(this, e);
+    });
+}
+
+function handleVoiceClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('🎙 Клик, isRecording:', isRecording);
+    
+    if (isRecording) {
+        stopRecording();
+        return;
+    }
+    startRecording();
+}
+
+function startRecording() {
+    console.log('🎙 Начинаем запись...');
+    
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Ваш браузер не поддерживает запись голоса');
+        return;
+    }
+    
+    navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(stream) {
+            console.log('✅ Микрофон доступен');
+            audioChunks = [];
+            isRecording = true;
+            
+            if (voiceBtn) {
+                voiceBtn.textContent = '⏹';
+                voiceBtn.style.background = '#EF4444';
+                voiceBtn.style.color = 'white';
+            }
+            
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+            mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+            
+            mediaRecorder.ondataavailable = function(event) {
+                if (event.data.size > 0) audioChunks.push(event.data);
+            };
+            
+            mediaRecorder.onstop = function() {
+                const blob = new Blob(audioChunks, { type: mimeType });
+                console.log('📦 Размер записи:', blob.size);
+                
+                if (voiceBtn) {
+                    voiceBtn.textContent = '🎙';
+                    voiceBtn.style.background = '#EEF1FE';
+                    voiceBtn.style.color = '#4F6EF7';
+                }
+                isRecording = false;
+                
+                if (blob.size > 2000) {
+                    sendVoiceMessage(blob);
+                } else if (blob.size > 0) {
+                    alert('Запись слишком короткая');
+                }
+                
+                stream.getTracks().forEach(function(track) { track.stop(); });
+                mediaRecorder = null;
+            };
+            
+            mediaRecorder.start(1000);
+            
+            setTimeout(function() {
+                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
+                }
+            }, 60000);
+        })
+        .catch(function(err) {
+            console.error('❌ Ошибка:', err);
+            alert('Нет доступа к микрофону');
+        });
+}
+
+function stopRecording() {
+    console.log('⏹ Остановка записи...');
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+    } else {
+        isRecording = false;
+        if (voiceBtn) {
+            voiceBtn.textContent = '🎙';
+            voiceBtn.style.background = '#EEF1FE';
+            voiceBtn.style.color = '#4F6EF7';
+        }
+    }
+}
+
+function sendVoiceMessage(blob) {
+    console.log('📤 Отправка голосового, размер:', blob.size);
+    
+    let to = window.currentChatPartner;
+    if (!to) {
+        const activeDialog = document.querySelector('.dialog-item.active');
+        if (activeDialog) to = activeDialog.dataset.userId;
+    }
+    if (!to) {
+        const header = document.getElementById('chatPartnerText');
+        if (header) {
+            const match = header.innerHTML.match(/data-userid="([^"]+)"/);
+            if (match) to = match[1];
+        }
+    }
+    
+    console.log('🔍 Получатель:', to);
+    if (!to) {
+        alert('❌ Откройте чат с собеседником');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('to', to);
+    formData.append('duration', Math.round(blob.size / 16000) || 1);
+    formData.append('audio', blob, 'voice.webm');
+    
+    console.log('📦 FormData создана');
+    for (let pair of formData.entries()) {
+        if (pair[1] instanceof Blob) {
+            console.log('📦', pair[0], ': Blob (', pair[1].size, 'bytes)');
+        } else {
+            console.log('📦', pair[0], ':', pair[1]);
+        }
+    }
+    
+    const token = localStorage.getItem('token');
+    if (!token) {
+        alert('❌ Вы не авторизованы');
+        return;
+    }
+    
+    if (voiceBtn) {
+        voiceBtn.textContent = '⏳';
+        voiceBtn.style.background = '#F59E0B';
+        voiceBtn.style.color = 'white';
+    }
+    
+    fetch('/api/messages/audio', {
+        method: 'POST',
+        headers: {
+            'Authorization': 'Bearer ' + token
+        },
+        body: formData
+    })
+    .then(async function(r) {
+        console.log('📡 Статус ответа:', r.status);
+        const text = await r.text();
+        console.log('📡 Текст ответа:', text);
+        
+        if (!r.ok) {
+            try {
+                const data = JSON.parse(text);
+                throw new Error(data.error || 'Ошибка сервера');
+            } catch(e) {
+                throw new Error('Ошибка: ' + text);
+            }
+        }
+        return JSON.parse(text);
+    })
+    .then(function(data) {
+        console.log('✅ Голосовое отправлено!', data);
+        alert('✅ Голосовое отправлено!');
+        
+        if (window.loadMessages) {
+            window.lastMessagesHash = '';
+            window.loadMessages();
+        }
+        if (window.loadDialogs) {
+            window.loadDialogs();
+        }
+    })
+    .catch(function(err) {
+        console.error('❌ Ошибка:', err);
+        alert('❌ ' + err.message);
+    })
+    .finally(function() {
+        if (voiceBtn && !isRecording) {
+            voiceBtn.textContent = '🎙';
+            voiceBtn.style.background = '#EEF1FE';
+            voiceBtn.style.color = '#4F6EF7';
+        }
+    });
+}
+
+// ===== ДОПОЛНИТЕЛЬНАЯ ИНИЦИАЛИЗАЦИЯ =====
 document.addEventListener('DOMContentLoaded', function() {
     const sendBtn = document.getElementById('sendMessageBtn');
     if (sendBtn) {
@@ -962,6 +1319,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (input) {
         console.log('✅ messageInput уже существует при загрузке');
     }
+    
+    setTimeout(createVoiceButton, 1000);
 });
 
 console.log('✅ WebSocket клиент готов');
@@ -984,456 +1343,4 @@ console.log('✅ WebSocket клиент готов');
     } else {
         authBlock.classList.remove('hidden');
     }
-})();
-
-// ===== ГОЛОСОВЫЕ СООБЩЕНИЯ =====
-(function initVoiceMessages() {
-    console.log('🎙 Запуск голосовых сообщений...');
-    
-    let isRecording = false;
-    let mediaRecorder = null;
-    let audioChunks = [];
-    let voiceBtn = null;
-    
-    function createVoiceButton() {
-        const chatInput = document.querySelector('.chat-input');
-        if (!chatInput) {
-            setTimeout(createVoiceButton, 1000);
-            return;
-        }
-        
-        // Удаляем старые кнопки
-        document.querySelectorAll('#voiceBtnFinal, #micBtn, #micBtnUniversal, #micBtnMobile').forEach(el => el.remove());
-        
-        voiceBtn = document.createElement('button');
-        voiceBtn.id = 'voiceBtnFinal';
-        voiceBtn.textContent = '🎙';
-        voiceBtn.type = 'button';
-        voiceBtn.style.cssText = `
-            width: 44px;
-            height: 44px;
-            min-width: 44px;
-            border-radius: 50%;
-            border: none;
-            background: #EEF1FE;
-            color: #4F6EF7;
-            font-size: 20px;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            transition: all 0.25s ease;
-            touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
-            user-select: none;
-            -webkit-user-select: none;
-            margin-right: 4px;
-        `;
-        
-        const messageInput = document.getElementById('messageInput');
-        if (messageInput) {
-            chatInput.insertBefore(voiceBtn, messageInput);
-        } else {
-            chatInput.appendChild(voiceBtn);
-        }
-        
-        console.log('✅ Кнопка микрофона создана');
-        
-        voiceBtn.addEventListener('click', handleVoiceClick);
-        voiceBtn.addEventListener('touchstart', function(e) {
-            e.preventDefault();
-            handleVoiceClick.call(this, e);
-        });
-    }
-    
-    function handleVoiceClick(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        console.log('🎙 Клик, isRecording:', isRecording);
-        
-        if (isRecording) {
-            stopRecording();
-            return;
-        }
-        startRecording();
-    }
-    
-    function startRecording() {
-        console.log('🎙 Начинаем запись...');
-        
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            alert('Ваш браузер не поддерживает запись голоса');
-            return;
-        }
-        
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(function(stream) {
-                console.log('✅ Микрофон доступен');
-                audioChunks = [];
-                isRecording = true;
-                
-                if (voiceBtn) {
-                    voiceBtn.textContent = '⏹';
-                    voiceBtn.style.background = '#EF4444';
-                    voiceBtn.style.color = 'white';
-                }
-                
-                const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
-                mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
-                
-                mediaRecorder.ondataavailable = function(event) {
-                    if (event.data.size > 0) audioChunks.push(event.data);
-                };
-                
-                mediaRecorder.onstop = function() {
-                    const blob = new Blob(audioChunks, { type: mimeType });
-                    console.log('📦 Размер записи:', blob.size);
-                    
-                    if (voiceBtn) {
-                        voiceBtn.textContent = '🎙';
-                        voiceBtn.style.background = '#EEF1FE';
-                        voiceBtn.style.color = '#4F6EF7';
-                    }
-                    isRecording = false;
-                    
-                    if (blob.size > 2000) {
-                        sendVoiceMessage(blob);
-                    } else if (blob.size > 0) {
-                        alert('Запись слишком короткая');
-                    }
-                    
-                    stream.getTracks().forEach(function(track) { track.stop(); });
-                    mediaRecorder = null;
-                };
-                
-                mediaRecorder.start(1000);
-                
-                setTimeout(function() {
-                    if (mediaRecorder && mediaRecorder.state === 'recording') {
-                        mediaRecorder.stop();
-                    }
-                }, 60000);
-            })
-            .catch(function(err) {
-                console.error('❌ Ошибка:', err);
-                alert('Нет доступа к микрофону');
-            });
-    }
-    
-    function stopRecording() {
-        console.log('⏹ Остановка записи...');
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-        } else {
-            isRecording = false;
-            if (voiceBtn) {
-                voiceBtn.textContent = '🎙';
-                voiceBtn.style.background = '#EEF1FE';
-                voiceBtn.style.color = '#4F6EF7';
-            }
-        }
-    }
-    
-    function sendVoiceMessage(blob) {
-        let to = window.currentChatPartner;
-        
-        if (!to) {
-            const activeDialog = document.querySelector('.dialog-item.active');
-            if (activeDialog) to = activeDialog.dataset.userId;
-        }
-        if (!to) {
-            const header = document.getElementById('chatPartnerText');
-            if (header) {
-                const match = header.innerHTML.match(/data-userid="([^"]+)"/);
-                if (match) to = match[1];
-            }
-        }
-        
-        console.log('🔍 Получатель:', to);
-        
-        if (!to) {
-            alert('❌ Откройте чат с собеседником');
-            return;
-        }
-        
-        const fd = new FormData();
-        fd.append('to', to);
-        fd.append('audio', blob, 'voice.webm');
-        fd.append('duration', Math.round(blob.size / 16000) || 1);
-        
-        const token = localStorage.getItem('token');
-        if (!token) {
-            alert('❌ Вы не авторизованы');
-            return;
-        }
-        
-        console.log('📤 Отправка...');
-        
-        if (voiceBtn) {
-            voiceBtn.textContent = '⏳';
-            voiceBtn.style.background = '#F59E0B';
-            voiceBtn.style.color = 'white';
-        }
-        
-        fetch('/api/messages/audio', {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + token },
-            body: fd
-        })
-        .then(function(r) {
-            console.log('📡 Статус:', r.status);
-            if (!r.ok) {
-                return r.text().then(function(text) {
-                    try {
-                        const err = JSON.parse(text);
-                        throw new Error(err.error || 'Ошибка сервера');
-                    } catch(e) {
-                        throw new Error('Ошибка: ' + text);
-                    }
-                });
-            }
-            return r.json();
-        })
-        .then(function(data) {
-            console.log('✅ Голосовое отправлено!', data);
-            if (window.loadMessages) {
-                window.lastMessagesHash = '';
-                window.loadMessages();
-            }
-            if (window.loadDialogs) {
-                window.loadDialogs();
-            }
-        })
-        .catch(function(err) {
-            console.error('❌ Ошибка:', err);
-            alert('❌ ' + err.message);
-        })
-        .finally(function() {
-            if (voiceBtn && !isRecording) {
-                voiceBtn.textContent = '🎙';
-                voiceBtn.style.background = '#EEF1FE';
-                voiceBtn.style.color = '#4F6EF7';
-            }
-        });
-    }
-    
-    setTimeout(createVoiceButton, 500);
-    
-    const originalOpenChat = window.openChat;
-    if (typeof originalOpenChat === 'function') {
-        window.openChat = function(uid, un, avUrl) {
-            if (originalOpenChat) originalOpenChat(uid, un, avUrl);
-            setTimeout(createVoiceButton, 300);
-        };
-    }
-    
-    console.log('✅ Голосовые сообщения готовы!');
-})();
-
-// ===== АУДИО-ПЛЕЕР ДЛЯ СООБЩЕНИЙ =====
-(function audioPlayerFix() {
-    console.log('🎵 Загрузка аудио-плеера...');
-    
-    // Функция создания плеера
-    function createAudioPlayer(audioUrl, duration) {
-        const container = document.createElement('div');
-        container.className = 'audio-message';
-        
-        // Кнопка воспроизведения
-        const playBtn = document.createElement('button');
-        playBtn.className = 'audio-play-btn';
-        playBtn.textContent = '▶';
-        playBtn.dataset.playing = 'false';
-        
-        // Прогресс-бар
-        const progressContainer = document.createElement('div');
-        progressContainer.className = 'audio-progress';
-        const progressBar = document.createElement('div');
-        progressBar.className = 'audio-progress-bar';
-        progressBar.style.width = '0%';
-        progressContainer.appendChild(progressBar);
-        
-        // Время
-        const timeDisplay = document.createElement('span');
-        timeDisplay.className = 'audio-time';
-        timeDisplay.textContent = formatDuration(duration || 0);
-        
-        container.appendChild(playBtn);
-        container.appendChild(progressContainer);
-        container.appendChild(timeDisplay);
-        
-        let audio = null;
-        let isPlaying = false;
-        let progressInterval = null;
-        
-        playBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            
-            if (!audio) {
-                audio = new Audio(audioUrl);
-                audio.addEventListener('ended', function() {
-                    stopPlayback();
-                });
-                audio.addEventListener('timeupdate', function() {
-                    if (audio.duration) {
-                        const percent = (audio.currentTime / audio.duration) * 100;
-                        progressBar.style.width = Math.min(percent, 100) + '%';
-                        const remaining = Math.max(0, audio.duration - audio.currentTime);
-                        timeDisplay.textContent = formatDuration(Math.round(remaining));
-                    }
-                });
-                audio.addEventListener('error', function(e) {
-                    console.error('❌ Ошибка аудио:', e);
-                    showNotification('Ошибка', 'Не удалось воспроизвести аудио', 'system');
-                    stopPlayback();
-                });
-            }
-            
-            if (isPlaying) {
-                stopPlayback();
-            } else {
-                startPlayback();
-            }
-        });
-        
-        function startPlayback() {
-            if (!audio) return;
-            audio.play().catch(function(err) {
-                console.error('❌ Ошибка воспроизведения:', err);
-                showNotification('Ошибка', 'Не удалось воспроизвести аудио', 'system');
-            });
-            isPlaying = true;
-            playBtn.textContent = '⏸';
-            playBtn.dataset.playing = 'true';
-            
-            progressInterval = setInterval(function() {
-                if (audio.duration) {
-                    const remaining = Math.max(0, audio.duration - audio.currentTime);
-                    timeDisplay.textContent = formatDuration(Math.round(remaining));
-                }
-            }, 200);
-        }
-        
-        function stopPlayback() {
-            if (audio) {
-                audio.pause();
-                audio.currentTime = 0;
-            }
-            isPlaying = false;
-            playBtn.textContent = '▶';
-            playBtn.dataset.playing = 'false';
-            progressBar.style.width = '0%';
-            timeDisplay.textContent = formatDuration(duration || 0);
-            if (progressInterval) {
-                clearInterval(progressInterval);
-                progressInterval = null;
-            }
-        }
-        
-        // Очистка при удалении
-        container.addEventListener('remove', function() {
-            if (audio) {
-                audio.pause();
-                audio = null;
-            }
-            if (progressInterval) {
-                clearInterval(progressInterval);
-                progressInterval = null;
-            }
-        });
-        
-        return container;
-    }
-    
-    // Форматирование времени
-    function formatDuration(seconds) {
-        if (!seconds || seconds < 0) return '0:00';
-        const mins = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        return mins + ':' + String(secs).padStart(2, '0');
-    }
-    
-    // Переопределяем функцию добавления сообщения
-    const originalAddMessage = window.addMessageToChat;
-    
-    window.addMessageToChat = function(msg) {
-        // Если это аудио-сообщение
-        if (msg.audioUrl) {
-            console.log('🎵 Создаём аудио-плеер для:', msg.audioUrl);
-            
-            const container = document.createElement('div');
-            container.className = 'message ' + (String(msg.from) === String(currentUser.id) ? 'message-sent' : 'message-received');
-            
-            // Добавляем плеер
-            const player = createAudioPlayer(msg.audioUrl, msg.duration || 0);
-            container.appendChild(player);
-            
-            // Добавляем время
-            const timeDiv = document.createElement('div');
-            timeDiv.className = 'message-time';
-            const t = new Date(msg.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-            timeDiv.textContent = t;
-            container.appendChild(timeDiv);
-            
-            // Проверяем, есть ли текст (обычно "🎤 Голосовое сообщение")
-            if (msg.text && msg.text !== '🎤 Голосовое сообщение') {
-                const textDiv = document.createElement('div');
-                textDiv.className = 'message-text';
-                textDiv.textContent = msg.text;
-                container.insertBefore(textDiv, container.firstChild);
-            }
-            
-            const chatMessagesEl = document.getElementById('chatMessages');
-            if (chatMessagesEl) {
-                chatMessagesEl.appendChild(container);
-                chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-            }
-            
-            return;
-        }
-        
-        // Если есть оригинальная функция — используем её для остальных сообщений
-        if (typeof originalAddMessage === 'function') {
-            originalAddMessage(msg);
-        }
-    };
-    
-    // Также добавляем обработку для уже загруженных сообщений
-    function fixExistingMessages() {
-        console.log('🔧 Проверка существующих сообщений...');
-        const messages = document.querySelectorAll('.message');
-        messages.forEach(function(msgEl) {
-            // Ищем текст "🎤 Голосовое сообщение"
-            const textEl = msgEl.querySelector('.message-text');
-            if (textEl && textEl.textContent.includes('🎤 Голосовое')) {
-                // Ищем audioUrl в данных
-                const audioUrl = msgEl.dataset.audioUrl;
-                if (audioUrl) {
-                    console.log('🎵 Найдено существующее аудио:', audioUrl);
-                    // Заменяем текст на плеер
-                    const duration = parseInt(msgEl.dataset.duration) || 0;
-                    const player = createAudioPlayer(audioUrl, duration);
-                    textEl.replaceWith(player);
-                }
-            }
-        });
-    }
-    
-    // Запускаем через небольшую задержку
-    setTimeout(fixExistingMessages, 1000);
-    
-    // Также запускаем при загрузке новых сообщений
-    const originalLoadMessages = window.loadMessages;
-    if (typeof originalLoadMessages === 'function') {
-        window.loadMessages = function() {
-            const result = originalLoadMessages.apply(this, arguments);
-            // После загрузки проверяем сообщения
-            setTimeout(fixExistingMessages, 500);
-            return result;
-        };
-    }
-    
-    console.log('✅ Аудио-плеер готов!');
 })();
