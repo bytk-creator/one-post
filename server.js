@@ -532,118 +532,173 @@ const server = http.createServer(async (req, res) => {
         return serveJSON(res, fixed);
     }
 
-    // ===== ОБРАБОТКА АУДИО (ГОЛОСОВЫЕ СООБЩЕНИЯ) =====
-    if (url === '/api/messages/audio' && method === 'POST') {
-        console.log('🎙 Получен запрос на загрузку аудио');
-        
-        if (!currentUser) {
-            return serveJSON(res, { error: 'Не авторизован' }, 401);
-        }
-        
-        const result = await parseFormData(req);
-        if (result.error) {
-            return serveJSON(res, { error: 'Ошибка загрузки аудио: ' + result.error }, 400);
-        }
-        
-        const { fields, files } = result;
-        const to = fields.to;
-        const duration = parseInt(fields.duration) || 0;
-        
-        if (!to) {
-            return serveJSON(res, { error: 'Получатель обязателен' }, 400);
-        }
-        
-        const targetUser = queryOne('SELECT id FROM users WHERE id = ?', [String(to)]);
-        if (!targetUser) {
-            return serveJSON(res, { error: 'Пользователь не найден' }, 404);
-        }
-        
-        if (String(to) === String(currentUser.id)) {
-            return serveJSON(res, { error: 'Нельзя себе' }, 400);
-        }
-        
-        let audioUrl = null;
-        let fileData = null;
-        
-        // Ищем файл в разных полях
-        const possibleFields = ['audio', 'file', 'audioFile', 'voice', 'recording'];
-        for (const field of possibleFields) {
-            if (files[field] && files[field][0]) {
+// ===== ОБРАБОТКА АУДИО (ГОЛОСОВЫЕ СООБЩЕНИЯ) =====
+if (url === '/api/messages/audio' && method === 'POST') {
+    console.log('🎙 Получен запрос на загрузку аудио');
+    console.log('🔍 Headers:', req.headers);
+    
+    if (!currentUser) {
+        console.log('❌ Не авторизован');
+        return serveJSON(res, { error: 'Не авторизован' }, 401);
+    }
+    
+    // === ПРОВЕРЯЕМ, ЧТО ПРИХОДИТ ===
+    let rawData = '';
+    req.on('data', chunk => { rawData += chunk; });
+    req.on('end', () => {
+        console.log('📦 Raw data length:', rawData.length);
+        console.log('📦 Raw data preview:', rawData.substring(0, 200));
+    });
+    
+    const result = await parseFormData(req);
+    console.log('📦 Результат парсинга:', JSON.stringify(result, null, 2));
+    
+    if (result.error) {
+        console.log('❌ Ошибка парсинга:', result.error);
+        return serveJSON(res, { error: 'Ошибка загрузки аудио: ' + result.error }, 400);
+    }
+    
+    const { fields, files } = result;
+    console.log('📋 fields:', fields);
+    console.log('📎 files keys:', Object.keys(files));
+    console.log('📎 files full:', files);
+    
+    const to = fields.to;
+    const duration = parseInt(fields.duration) || 0;
+    
+    if (!to) {
+        console.log('❌ Нет получателя');
+        return serveJSON(res, { error: 'Получатель обязателен' }, 400);
+    }
+    
+    const targetUser = queryOne('SELECT id FROM users WHERE id = ?', [String(to)]);
+    if (!targetUser) {
+        console.log('❌ Пользователь не найден');
+        return serveJSON(res, { error: 'Пользователь не найден' }, 404);
+    }
+    
+    if (String(to) === String(currentUser.id)) {
+        console.log('❌ Нельзя себе');
+        return serveJSON(res, { error: 'Нельзя себе' }, 400);
+    }
+    
+    let audioUrl = null;
+    let fileData = null;
+    
+    // === ИЩЕМ ФАЙЛ ВО ВСЕХ ВОЗМОЖНЫХ ПОЛЯХ ===
+    const possibleFields = ['audio', 'file', 'audioFile', 'voice', 'recording', 'files'];
+    
+    for (const field of possibleFields) {
+        if (files[field]) {
+            console.log(`🔍 Проверяем поле "${field}":`, files[field]);
+            if (Array.isArray(files[field]) && files[field][0]) {
                 fileData = files[field][0];
-                console.log(`📎 Нашли файл в поле "${field}":`, fileData.originalFilename);
+                console.log(`📎 Нашли файл в поле "${field}" (массив):`, fileData.originalFilename);
+                break;
+            } else if (files[field] && typeof files[field] === 'object' && files[field].originalFilename) {
+                fileData = files[field];
+                console.log(`📎 Нашли файл в поле "${field}" (объект):`, fileData.originalFilename);
                 break;
             }
         }
-        
-        if (!fileData) {
-            console.log('❌ Файл не найден');
-            return serveJSON(res, { error: 'Аудио файл не найден' }, 400);
-        }
-        
-        const allowedTypes = ['audio/webm', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'video/webm'];
-        if (!allowedTypes.includes(fileData.mimetype)) {
-            return serveJSON(res, { error: 'Неподдерживаемый формат: ' + fileData.mimetype }, 400);
-        }
-        
-        const ext = path.extname(fileData.originalFilename || '.webm');
-        const fileName = 'audio-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex') + ext;
-        const audioPath = path.join(AUDIO_DIR, fileName);
-        
-        try {
+    }
+    
+    // === ПРОВЕРЯЕМ, МОЖЕТ БЫТЬ ФАЙЛ В ДРУГОМ МЕСТЕ ===
+    if (!fileData && files.audio && files.audio[0]) {
+        fileData = files.audio[0];
+        console.log('📎 Нашли файл в audio[0]:', fileData.originalFilename);
+    }
+    
+    // === ПРОВЕРЯЕМ ЧЕРЕЗ REQ.FILES (некоторые версии formidable) ===
+    if (!fileData && req.files && req.files.audio) {
+        fileData = req.files.audio;
+        console.log('📎 Нашли файл в req.files.audio');
+    }
+    
+    if (!fileData) {
+        console.log('❌ Файл не найден, все поля:', Object.keys(files));
+        console.log('❌ files содержимое:', JSON.stringify(files, null, 2));
+        return serveJSON(res, { error: 'Аудио файл не найден. Получены поля: ' + Object.keys(files).join(', ') }, 400);
+    }
+    
+    console.log('📎 Файл найден:', {
+        originalFilename: fileData.originalFilename,
+        mimetype: fileData.mimetype,
+        size: fileData.size,
+        filepath: fileData.filepath
+    });
+    
+    const allowedTypes = ['audio/webm', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'video/webm'];
+    if (!allowedTypes.includes(fileData.mimetype)) {
+        console.log('❌ Неподдерживаемый формат:', fileData.mimetype);
+        return serveJSON(res, { error: 'Неподдерживаемый формат: ' + fileData.mimetype }, 400);
+    }
+    
+    const ext = path.extname(fileData.originalFilename || '.webm');
+    const fileName = 'audio-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex') + ext;
+    const audioPath = path.join(AUDIO_DIR, fileName);
+    
+    console.log('💾 Сохраняем файл:', audioPath);
+    
+    try {
+        if (fs.existsSync(fileData.filepath)) {
             fs.renameSync(fileData.filepath, audioPath);
             audioUrl = '/uploads/audio/' + fileName;
             console.log('✅ Файл сохранён:', audioUrl);
-        } catch (err) {
-            console.error('❌ Ошибка сохранения:', err);
-            return serveJSON(res, { error: 'Ошибка сохранения файла' }, 500);
+        } else {
+            console.log('❌ Исходный файл не найден:', fileData.filepath);
+            return serveJSON(res, { error: 'Файл не найден на сервере' }, 400);
         }
-        
-        // === СОХРАНЯЕМ СООБЩЕНИЕ С audioUrl ===
-        const msgId = Date.now().toString();
-        const storedText = JSON.stringify({
+    } catch (err) {
+        console.error('❌ Ошибка сохранения:', err);
+        return serveJSON(res, { error: 'Ошибка сохранения: ' + err.message }, 500);
+    }
+    
+    // Сохраняем сообщение
+    const msgId = Date.now().toString();
+    const storedText = JSON.stringify({
+        text: '🎤 Голосовое сообщение',
+        audioUrl: audioUrl,
+        duration: duration,
+        imageUrl: null,
+        replyTo: null,
+        replyToText: null
+    });
+    
+    runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)',
+        [msgId, currentUser.id, String(to), storedText, new Date().toISOString()]);
+    
+    sendMessageViaWS(to, {
+        type: 'new_message',
+        payload: {
+            id: msgId,
+            from: String(currentUser.id),
+            to: String(to),
             text: '🎤 Голосовое сообщение',
             audioUrl: audioUrl,
             duration: duration,
             imageUrl: null,
             replyTo: null,
-            replyToText: null
-        });
-        
-        runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)',
-            [msgId, currentUser.id, String(to), storedText, new Date().toISOString()]);
-        
-        // === ОТПРАВЛЯЕМ ЧЕРЕЗ WEBSOCKET С audioUrl ===
-        sendMessageViaWS(to, {
-            type: 'new_message',
-            payload: {
-                id: msgId,
-                from: String(currentUser.id),
-                to: String(to),
-                text: '🎤 Голосовое сообщение',
-                audioUrl: audioUrl,
-                duration: duration,
-                imageUrl: null,
-                replyTo: null,
-                replyToText: null,
-                time: new Date().toISOString(),
-                read: 0,
-                fromUsername: currentUser.username
-            }
-        });
-        
-        console.log('✅ Аудио сообщение создано, audioUrl:', audioUrl);
-        return serveJSON(res, {
-            success: true,
-            message: {
-                id: msgId,
-                from: String(currentUser.id),
-                to: String(to),
-                audioUrl: audioUrl,
-                duration: duration,
-                fromUsername: currentUser.username
-            }
-        });
-    }
+            replyToText: null,
+            time: new Date().toISOString(),
+            read: 0,
+            fromUsername: currentUser.username
+        }
+    });
+    
+    console.log('✅ Аудио сообщение создано, audioUrl:', audioUrl);
+    return serveJSON(res, {
+        success: true,
+        message: {
+            id: msgId,
+            from: String(currentUser.id),
+            to: String(to),
+            audioUrl: audioUrl,
+            duration: duration,
+            fromUsername: currentUser.username
+        }
+    });
+}
 
     if (url === '/api/messages/photo' && method === 'POST') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
