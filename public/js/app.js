@@ -169,17 +169,22 @@ function logout() {
     localStorage.removeItem('token');
     token = '';
     clearInterval(unreadInterval);
+    appBlock.style.display = 'none';
     appBlock.classList.add('hidden');
+    authBlock.style.display = '';
     authBlock.classList.remove('hidden');
     currentUser = null;
 }
+
 logoutBtnMobile.addEventListener('click', logout);
 logoutBtnDesktop.addEventListener('click', logout);
 
 function enterApp(user) {
     currentUser = user;
     currentUser.id = String(currentUser.id);
+    authBlock.style.display = 'none';
     authBlock.classList.add('hidden');
+    appBlock.style.display = '';
     appBlock.classList.remove('hidden');
     startApp();
 }
