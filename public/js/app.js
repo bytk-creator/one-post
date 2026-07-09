@@ -16,6 +16,13 @@ let feedObserver = null;
 let replyTo = null;
 let notifiedMsgIds = new Set();
 
+// ===== WEBSOCKET ПЕРЕМЕННЫЕ =====
+let ws = null;
+let wsConnected = false;
+let wsReconnectTimer = null;
+let typingTimer = null;
+let typingIndicatorEl = null;
+
 const authBlock = document.getElementById('authBlock');
 const appBlock = document.getElementById('appBlock');
 const loginForm = document.getElementById('loginForm');
@@ -210,6 +217,9 @@ async function startApp() {
         unreadInterval = setInterval(updateUnreadBadge, 5000);
         setInterval(() => { if (token) apiCall('/api/ping', 'POST').catch(() => {}); }, 30000);
         apiCall('/api/ping', 'POST').catch(() => {});
+        
+        // Подключаем WebSocket
+        setTimeout(() => connectWebSocket(), 1000);
     } catch (err) { logout(); }
 }
 
@@ -421,7 +431,11 @@ async function updateUnreadBadge() {
 
 async function loadDialogs() { try { const dialogs = await apiCall('/api/dialogs', 'GET'); dialogsList.innerHTML = ''; if (!dialogs.length) { dialogsList.innerHTML = '<div class="no-dialogs">Нет диалогов</div>'; } dialogs.forEach(d => { const div = document.createElement('div'); div.className = 'dialog-item'; if (String(currentChatPartner) === String(d.userId)) div.classList.add('active'); const t = d.lastTime ? new Date(d.lastTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''; div.innerHTML = `<div class="dialog-avatar">${d.avatarUrl ? `<img src="${d.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" loading="lazy">` : d.username.charAt(0).toUpperCase()}</div><div class="dialog-info"><div class="dialog-name">${esc(d.username)}${onlineDot(d.online)}</div><div class="dialog-last">${esc((d.lastMessage || '').substring(0, 30))}</div></div><div class="dialog-meta"><div class="dialog-time">${t}</div>${d.unread > 0 ? `<div class="unread-badge">${d.unread}</div>` : ''}</div>`; div.addEventListener('click', () => openChat(d.userId, d.username, d.avatarUrl)); dialogsList.appendChild(div); }); } catch (err) {} }
 let st; searchUserInput.addEventListener('input', () => { clearTimeout(st); const q = searchUserInput.value.trim(); if (!q) { searchResults.classList.add('hidden'); return; } st = setTimeout(async () => { try { const users = await apiCall('/api/users/search?q=' + encodeURIComponent(q), 'GET'); searchResults.classList.remove('hidden'); searchResults.innerHTML = ''; if (!users.length) searchResults.innerHTML = '<div class="search-result-item" style="color:var(--text-secondary);">Никого нет</div>'; users.forEach(u => { const div = document.createElement('div'); div.className = 'search-result-item'; div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '10px'; div.style.padding = '12px 14px'; const av = u.avatarUrl ? `<img src="${u.avatarUrl}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:36px;height:36px;border-radius:50%;background:var(--avatar-gradient,linear-gradient(135deg,#4F6EF7,#7B8CFF));color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;">${u.username.charAt(0).toUpperCase()}</div>`; div.innerHTML = av + '<span style="font-size:14px;font-weight:600;">' + esc(u.username) + '</span>'; div.addEventListener('click', () => { openChat(u.id, u.username, u.avatarUrl); searchUserInput.value = ''; searchResults.classList.add('hidden'); }); searchResults.appendChild(div); }); } catch (err) {} }, 300); });
+
+// ===== ОСНОВНАЯ ФУНКЦИЯ openChat =====
 function openChat(uid, un, avUrl) {
+    console.log('📂 openChat вызван для:', uid);
+    
     currentChatPartner = String(uid);
     lastMessagesHash = '';
     messagesHasMore = true;
@@ -442,6 +456,30 @@ function openChat(uid, un, avUrl) {
     if (chatCloseBtn) chatCloseBtn.style.display = 'flex';
     loadMessages(); loadDialogs();
     if (innerWidth <= 768) { dialogsSidebar.classList.add('chat-open'); messagesLayout.classList.add('mobile-view'); }
+    
+    // ===== ДОБАВЛЯЕМ ОБРАБОТЧИК TYPING =====
+    setTimeout(() => {
+        const input = document.getElementById('messageInput');
+        if (input && !input._typingHandler) {
+            input._typingHandler = true;
+            console.log('✅ Добавляем обработчик typing на messageInput');
+            
+            input.addEventListener('input', function() {
+                const hasText = this.value.trim().length > 0;
+                console.log('✏️ Ввод:', hasText ? 'есть текст' : 'пусто');
+                
+                if (hasText) {
+                    sendTypingStatus(true);
+                    clearTimeout(typingTimer);
+                    typingTimer = setTimeout(() => {
+                        sendTypingStatus(false);
+                    }, 2000);
+                } else {
+                    sendTypingStatus(false);
+                }
+            });
+        }
+    }, 100);
 }
 
 function closeChat() {
@@ -460,6 +498,7 @@ chatBackBtn.addEventListener('click', closeChat);
 chatCloseBtn?.addEventListener('click', closeChat);
 
 messageInput.addEventListener('input', () => { sendMessageBtn.disabled = !(messageInput.value.trim() || chatPhoto); });
+
 async function loadMessages(before = null, prepend = false) {
     if (!currentChatPartner) return;
     if (messagesLoading) return;
@@ -541,9 +580,14 @@ async function loadMessages(before = null, prepend = false) {
     messagesLoading = false;
 }
 chatMessages.addEventListener('scroll', () => { if (chatMessages.scrollTop < 100 && messagesHasMore && !messagesLoading) { const fm = chatMessages.querySelector('.message'); if (fm && fm.dataset.msgTime) loadMessages(fm.dataset.msgTime, true); } });
+
 async function sendMsg() {
     const t = messageInput.value.trim();
     if ((!t && !chatPhoto) || !currentChatPartner) return;
+    
+    // Скрываем индикатор печатания
+    sendTypingStatus(false);
+    
     try {
         if (chatPhoto) {
             const fd = new FormData();
@@ -577,6 +621,7 @@ chatRemovePhoto.addEventListener('click', () => { chatPhoto = null; chatPhotoInp
 replyPreviewClose.addEventListener('click', () => { replyTo = null; replyPreview.classList.add('hidden'); });
 setInterval(() => { if (currentChatPartner && !messagesPage.classList.contains('hidden') && chatMessages.scrollTop > chatMessages.scrollHeight - chatMessages.clientHeight - 200) loadMessages(); }, 3000);
 setInterval(() => { if (!messagesPage.classList.contains('hidden')) loadDialogs(); }, 5000);
+
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
 function showNotification(title, text, type = 'system') {
@@ -644,32 +689,7 @@ window.addEventListener('popstate', () => {
     navigateFromURL(path);
 });
 
-(function() {
-    const t = localStorage.getItem('token');
-    if (t) {
-        token = t;
-        apiCall('/api/me', 'GET').then(d => {
-            enterApp(d.user);
-            const path = location.pathname.replace('/', '') || 'feed';
-            if (path === 'feed' || path === 'messages' || path === 'settings') {
-                setTimeout(() => navigateFromURL(path), 100);
-            }
-        }).catch(() => {
-            localStorage.removeItem('token'); token = '';
-            authBlock.classList.remove('hidden');
-        });
-    } else {
-        authBlock.classList.remove('hidden');
-    }
-})();
-
-// ===== WEBSOCKET КЛИЕНТ =====
-let ws = null;
-let wsConnected = false;
-let wsReconnectTimer = null;
-let typingTimer = null;
-let typingIndicatorEl = null;
-
+// ===== WEBSOCKET ФУНКЦИИ =====
 function connectWebSocket() {
     if (!token || !currentUser) {
         console.log('ℹ️ Нет токена или пользователя, WS не подключается');
@@ -829,8 +849,8 @@ function showTypingIndicator(from, isTyping) {
         return;
     }
     
-    const chatMessages = document.getElementById('chatMessages');
-    if (!chatMessages) {
+    const chatMessagesEl = document.getElementById('chatMessages');
+    if (!chatMessagesEl) {
         console.log('❌ chatMessages не найден');
         return;
     }
@@ -842,8 +862,8 @@ function showTypingIndicator(from, isTyping) {
             typingIndicatorEl.id = 'typingIndicator';
             typingIndicatorEl.className = 'typing-indicator';
             typingIndicatorEl.innerHTML = 'печатает<span class="typing-dots"><span></span><span></span><span></span></span>';
-            chatMessages.appendChild(typingIndicatorEl);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            chatMessagesEl.appendChild(typingIndicatorEl);
+            chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
         }
     } else {
         if (typingIndicatorEl) {
@@ -903,79 +923,40 @@ function sendTypingStatus(isTyping) {
     }, 300);
 }
 
-// ===== ПЕРЕОПРЕДЕЛЯЕМ openChat ДЛЯ ДОБАВЛЕНИЯ ОБРАБОТЧИКА TYPING =====
-const originalOpenChat = window.openChat || openChat;
-
-window.openChat = function(uid, un, avUrl) {
-    console.log('📂 openChat вызван для:', uid);
-    
-    // Вызываем оригинальную функцию
-    if (originalOpenChat) {
-        originalOpenChat(uid, un, avUrl);
-    }
-    
-    // Добавляем обработчик для typing
-    const messageInput = document.getElementById('messageInput');
-    if (messageInput && !messageInput._typingHandler) {
-        messageInput._typingHandler = true;
-        console.log('✅ Добавляем обработчик typing на messageInput');
-        
-        messageInput.addEventListener('input', function() {
-            const hasText = this.value.trim().length > 0;
-            console.log('✏️ Ввод:', hasText ? 'есть текст' : 'пусто');
-            
-            if (hasText) {
-                sendTypingStatus(true);
-                clearTimeout(typingTimer);
-                typingTimer = setTimeout(() => {
-                    sendTypingStatus(false);
-                }, 2000);
-            } else {
-                sendTypingStatus(false);
-            }
-        });
-    }
-    
-    // Отправляем статус, что мы в чате
-    if (wsConnected) {
-        try {
-            ws.send(JSON.stringify({
-                type: 'typing',
-                payload: {
-                    to: uid,
-                    isTyping: false
-                }
-            }));
-        } catch (err) {
-            console.error('❌ Ошибка отправки initial typing:', err);
-        }
-    }
-};
-
-// ===== ПЕРЕОПРЕДЕЛЯЕМ enterApp ДЛЯ ПОДКЛЮЧЕНИЯ WS =====
-const originalEnterApp = window.enterApp || enterApp;
-
-window.enterApp = function(user) {
-    console.log('🚀 enterApp вызван для:', user?.username);
-    
-    if (originalEnterApp) {
-        originalEnterApp(user);
-    }
-    
-    setTimeout(() => {
-        connectWebSocket();
-    }, 1000);
-};
-
-// ===== ДОПОЛНИТЕЛЬНЫЙ ОБРАБОТЧИК ДЛЯ КНОПКИ ОТПРАВКИ =====
+// Дополнительная инициализация
 document.addEventListener('DOMContentLoaded', function() {
     const sendBtn = document.getElementById('sendMessageBtn');
     if (sendBtn) {
         sendBtn.addEventListener('click', function() {
-            // Скрываем индикатор печатания при отправке
             sendTypingStatus(false);
         });
+    }
+    
+    // Проверяем, есть ли уже messageInput
+    const input = document.getElementById('messageInput');
+    if (input) {
+        console.log('✅ messageInput уже существует при загрузке');
     }
 });
 
 console.log('✅ WebSocket клиент готов');
+
+// Автозапуск если уже есть токен
+(function() {
+    const t = localStorage.getItem('token');
+    if (t) {
+        token = t;
+        apiCall('/api/me', 'GET').then(d => {
+            enterApp(d.user);
+            const path = location.pathname.replace('/', '') || 'feed';
+            if (path === 'feed' || path === 'messages' || path === 'settings') {
+                setTimeout(() => navigateFromURL(path), 100);
+            }
+        }).catch(() => {
+            localStorage.removeItem('token'); token = '';
+            authBlock.classList.remove('hidden');
+        });
+    } else {
+        authBlock.classList.remove('hidden');
+    }
+})();
