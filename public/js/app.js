@@ -662,3 +662,277 @@ window.addEventListener('popstate', () => {
         authBlock.classList.remove('hidden');
     }
 })();
+
+// ===== WEBSOCKET КЛИЕНТ =====
+let ws = null;
+let wsConnected = false;
+let wsReconnectTimer = null;
+let typingTimer = null;
+
+function connectWebSocket() {
+    if (!token || !currentUser) {
+        console.log('ℹ️ Нет токена или пользователя, WS не подключается');
+        return;
+    }
+    
+    try {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.hostname || 'localhost';
+        const port = window.location.port || '3000';
+        
+        // Для Railway используем тот же хост
+        const wsUrl = `${protocol}//${host}/ws?token=${token}`;
+        
+        console.log('🔌 Подключение к WebSocket:', wsUrl);
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+            console.log('✅ WebSocket подключен');
+            wsConnected = true;
+            
+            ws.send(JSON.stringify({
+                type: 'auth',
+                payload: {
+                    userId: currentUser?.id,
+                    token: token
+                }
+            }));
+        };
+        
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            } catch (err) {
+                console.error('❌ Ошибка парсинга WS:', err);
+            }
+        };
+        
+        ws.onclose = () => {
+            console.log('❌ WebSocket отключен');
+            wsConnected = false;
+            
+            clearTimeout(wsReconnectTimer);
+            wsReconnectTimer = setTimeout(() => {
+                if (token && currentUser) {
+                    connectWebSocket();
+                }
+            }, 5000);
+        };
+        
+        ws.onerror = (err) => {
+            console.error('❌ WebSocket ошибка:', err);
+            ws.close();
+        };
+        
+    } catch (err) {
+        console.error('❌ Ошибка подключения WS:', err);
+        clearTimeout(wsReconnectTimer);
+        wsReconnectTimer = setTimeout(() => {
+            if (token && currentUser) connectWebSocket();
+        }, 10000);
+    }
+}
+
+function handleWebSocketMessage(data) {
+    switch (data.type) {
+        case 'auth_success':
+            console.log('✅ WS авторизован');
+            break;
+            
+        case 'new_message': {
+            const msg = data.payload;
+            console.log('📨 Новое сообщение:', msg);
+            
+            if (currentChatPartner && String(msg.from) === String(currentChatPartner)) {
+                addMessageToChat(msg);
+                setTimeout(() => {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }, 100);
+            }
+            
+            loadDialogs();
+            updateUnreadBadge();
+            break;
+        }
+            
+        case 'online_status': {
+            const { userId, online } = data.payload;
+            updateOnlineStatusUI(userId, online);
+            break;
+        }
+            
+        case 'typing': {
+            const { from, isTyping } = data.payload;
+            showTypingIndicator(from, isTyping);
+            break;
+        }
+            
+        case 'message_sent':
+            console.log('✅ Сообщение отправлено:', data.payload);
+            break;
+            
+        case 'pong':
+            break;
+            
+        case 'error':
+            console.error('❌ WS ошибка:', data.payload);
+            break;
+            
+        default:
+            console.log('📨 Неизвестный тип:', data.type);
+    }
+}
+
+function addMessageToChat(msg) {
+    const div = document.createElement('div');
+    div.className = 'message ' + (String(msg.from) === String(currentUser.id) ? 'message-sent' : 'message-received');
+    div.dataset.msgTime = msg.time;
+    div.dataset.msgid = msg.id;
+    
+    const t = new Date(msg.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    
+    let inner = '';
+    if (msg.replyTo) {
+        const replyText = msg.replyToText || 'Сообщение';
+        inner += `<div class="message-reply" data-msgid="${msg.replyTo}">↩ ${esc(replyText.substring(0, 50))}</div>`;
+    }
+    inner += (msg.text ? esc(msg.text) : '');
+    if (msg.imageUrl) {
+        inner += `<img src="${msg.imageUrl}" class="message-image" alt="Фото" loading="lazy">`;
+    }
+    
+    let checkmark = '';
+    if (String(msg.from) === String(currentUser.id)) {
+        checkmark = '<span style="color:#4F6EF7;font-size:11px;margin-left:4px;" title="Прочитано">✓✓</span>';
+    }
+    inner += `<div class="message-time">${t}${checkmark}</div>`;
+    
+    div.innerHTML = inner;
+    
+    div.querySelector('.message-reply')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const msgId = e.currentTarget.dataset.msgid;
+        const target = document.querySelector(`.message[data-msgid="${msgId}"]`);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    
+    chatMessages.appendChild(div);
+}
+
+let typingIndicatorEl = null;
+
+function showTypingIndicator(from, isTyping) {
+    if (currentChatPartner && String(currentChatPartner) === String(from)) {
+        if (isTyping) {
+            if (!typingIndicatorEl) {
+                typingIndicatorEl = document.createElement('div');
+                typingIndicatorEl.id = 'typingIndicator';
+                typingIndicatorEl.className = 'typing-indicator';
+                typingIndicatorEl.textContent = 'печатает...';
+                chatMessages.appendChild(typingIndicatorEl);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        } else {
+            if (typingIndicatorEl) {
+                typingIndicatorEl.remove();
+                typingIndicatorEl = null;
+            }
+        }
+    }
+}
+
+function updateOnlineStatusUI(userId, online) {
+    const dialogItems = document.querySelectorAll('.dialog-item');
+    dialogItems.forEach(item => {
+        if (item.dataset.userId === String(userId)) {
+            const nameEl = item.querySelector('.dialog-name');
+            if (nameEl) {
+                const text = nameEl.textContent.replace(/<span[^>]*>.*?<\/span>/, '').trim();
+                const dot = online ? '<span style="display:inline-block;width:10px;height:10px;background:#10B981;border-radius:50%;margin-left:6px;flex-shrink:0;" title="Онлайн"></span>' : '';
+                nameEl.innerHTML = text + dot;
+            }
+        }
+    });
+    
+    if (currentChatPartner && String(currentChatPartner) === String(userId)) {
+        const partnerInfo = document.querySelector('.chat-partner-info');
+        if (partnerInfo) {
+            const name = partnerInfo.textContent.replace(/<span[^>]*>.*?<\/span>/, '').trim();
+            const av = partnerInfo.querySelector('img')?.outerHTML || '';
+            const dot = online ? '<span style="display:inline-block;width:10px;height:10px;background:#10B981;border-radius:50%;margin-left:6px;flex-shrink:0;" title="Онлайн"></span>' : '';
+            partnerInfo.innerHTML = av + '<span>' + esc(name) + dot + '</span>';
+        }
+    }
+}
+
+function sendTypingStatus(isTyping) {
+    if (!wsConnected || !currentChatPartner) return;
+    
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => {
+        try {
+            ws.send(JSON.stringify({
+                type: 'typing',
+                payload: {
+                    to: currentChatPartner,
+                    isTyping
+                }
+            }));
+        } catch (err) {
+            console.error('❌ Ошибка отправки typing:', err);
+        }
+    }, 300);
+}
+
+// Сохраняем оригинальные функции
+const originalOpenChat = window.openChat || openChat;
+const originalEnterApp = window.enterApp || enterApp;
+
+// Переопределяем openChat
+window.openChat = function(uid, un, avUrl) {
+    if (originalOpenChat) {
+        originalOpenChat(uid, un, avUrl);
+    }
+    if (wsConnected) {
+        try {
+            ws.send(JSON.stringify({
+                type: 'typing',
+                payload: {
+                    to: uid,
+                    isTyping: false
+                }
+            }));
+        } catch (err) {}
+    }
+};
+
+// Переопределяем enterApp
+window.enterApp = function(user) {
+    if (originalEnterApp) {
+        originalEnterApp(user);
+    }
+    setTimeout(() => {
+        connectWebSocket();
+    }, 1000);
+};
+
+// Перехватываем ввод для отправки статуса печатания
+document.addEventListener('DOMContentLoaded', function() {
+    const messageInput = document.getElementById('messageInput');
+    if (messageInput) {
+        messageInput.addEventListener('input', function() {
+            if (this.value.trim()) {
+                sendTypingStatus(true);
+                clearTimeout(typingTimer);
+                typingTimer = setTimeout(() => {
+                    sendTypingStatus(false);
+                }, 2000);
+            } else {
+                sendTypingStatus(false);
+            }
+        });
+    }
+});
+
+console.log('✅ WebSocket клиент готов');
