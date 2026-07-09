@@ -431,12 +431,17 @@ const server = http.createServer(async (req, res) => {
         return serveJSON(res, { count });
     }
 
-    if (url === '/' || url === '/index.html') return serveFile(res, 'public/index.html', 'text/html');
+    // Статика
     if (url === '/css/style.css') return serveFile(res, 'public/css/style.css', 'text/css');
     if (url === '/js/app.js') return serveFile(res, 'public/js/app.js', 'application/javascript');
     if (url === '/manifest.json') return serveFile(res, 'public/manifest.json', 'application/json');
     if (url === '/service-worker.js') return serveFile(res, 'public/service-worker.js', 'application/javascript');
     if (url.match(/^\/icon-\d+\.svg$/)) return serveFile(res, 'public' + url, 'image/svg+xml');
+
+    // SPA — все остальные GET-запросы отдают index.html
+    if (method === 'GET' && !url.startsWith('/api/') && !url.startsWith('/uploads/')) {
+        return serveFile(res, 'public/index.html', 'text/html');
+    }
 
     res.writeHead(404);
     res.end('Not found');
