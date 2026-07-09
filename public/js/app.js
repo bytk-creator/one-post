@@ -169,9 +169,7 @@ function logout() {
     localStorage.removeItem('token');
     token = '';
     clearInterval(unreadInterval);
-    appBlock.style.display = 'none';
     appBlock.classList.add('hidden');
-    authBlock.style.display = '';
     authBlock.classList.remove('hidden');
     currentUser = null;
     history.pushState({}, '', '/');
@@ -182,9 +180,7 @@ logoutBtnDesktop.addEventListener('click', logout);
 function enterApp(user) {
     currentUser = user;
     currentUser.id = String(currentUser.id);
-    authBlock.style.display = 'none';
     authBlock.classList.add('hidden');
-    appBlock.style.display = '';
     appBlock.classList.remove('hidden');
     startApp();
 }
@@ -300,7 +296,6 @@ function onlineDot(online) {
 async function viewProfile(userId) {
     if (!currentUser) return;
     viewingUserId = userId;
-    history.pushState({ page: 'profile' }, '', '/profile/' + userId);
     sidebarBtns.forEach(b => b.classList.remove('active'));
     feedPageEl.classList.add('hidden'); messagesPage.classList.add('hidden'); settingsPage.classList.add('hidden'); profilePage.classList.remove('hidden');
     profilePage.innerHTML = '<div class="skeleton" style="height:200px;border-radius:16px;"></div>';
@@ -392,19 +387,6 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s; re
 // ========== РОУТИНГ ==========
 function navigateFromURL(page) {
     sidebarBtns.forEach(b => b.classList.remove('active'));
-    
-    if (page.startsWith('profile/')) {
-        const userId = page.split('/')[1];
-        feedPageEl.classList.add('hidden');
-        profilePage.classList.remove('hidden');
-        messagesPage.classList.add('hidden');
-        settingsPage.classList.add('hidden');
-        dialogsSidebar.classList.remove('chat-open');
-        messagesLayout.classList.remove('mobile-view');
-        if (userId && currentUser) viewProfile(userId);
-        return;
-    }
-    
     const btn = document.querySelector(`[data-page="${page}"]`);
     if (btn) btn.classList.add('active');
     
@@ -433,16 +415,14 @@ window.addEventListener('popstate', () => {
         apiCall('/api/me', 'GET').then(d => {
             enterApp(d.user);
             const path = location.pathname.replace('/', '') || 'feed';
-            if (path === 'feed' || path === 'messages' || path === 'settings' || path.startsWith('profile/')) {
+            if (path === 'feed' || path === 'messages' || path === 'settings') {
                 setTimeout(() => navigateFromURL(path), 100);
             }
         }).catch(() => {
             localStorage.removeItem('token'); token = '';
-            authBlock.style.display = '';
             authBlock.classList.remove('hidden');
         });
     } else {
-        authBlock.style.display = '';
         authBlock.classList.remove('hidden');
     }
 })();
