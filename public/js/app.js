@@ -1074,7 +1074,6 @@ function createAudioMessageElement(audioUrl, duration) {
         }
     }
     
-    // Останавливаем аудио при удалении элемента
     container.addEventListener('remove', function() {
         if (audio) {
             audio.pause();
@@ -1117,32 +1116,24 @@ function startRecording() {
             
             mediaRecorder.onstop = () => {
                 audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                // Показываем превью записи
                 showRecordingPreview(audioBlob, recordingSeconds);
-                
-                // Останавливаем все треки
                 stream.getTracks().forEach(track => track.stop());
             };
             
             mediaRecorder.start();
             isRecording = true;
-            
-            // Обновляем UI
             updateRecordingUI(true);
             
-            // Таймер для отображения длительности
             recordingTimer = setInterval(() => {
                 recordingSeconds++;
                 updateRecordingTime(recordingSeconds);
             }, 1000);
             
-            // Авто-остановка через 60 секунд
             setTimeout(() => {
                 if (isRecording) {
                     stopRecording();
                 }
             }, 60000);
-            
         })
         .catch(err => {
             console.error('❌ Ошибка доступа к микрофону:', err);
@@ -1165,7 +1156,6 @@ function stopRecording() {
 }
 
 function showRecordingPreview(blob, duration) {
-    // Создаём временное окно с превью
     const preview = document.createElement('div');
     preview.className = 'recording-preview';
     preview.innerHTML = `
@@ -1182,11 +1172,9 @@ function showRecordingPreview(blob, duration) {
         </div>
     `;
     
-    // Сохраняем blob и duration в элементе
     preview.dataset.audioBlob = URL.createObjectURL(blob);
     preview.dataset.duration = duration;
     
-    // Добавляем в чат
     const chatInput = document.querySelector('.chat-input');
     if (chatInput) {
         chatInput.appendChild(preview);
@@ -1203,12 +1191,10 @@ async function sendAudioMessage(btn) {
     
     if (!audioUrl || !currentChatPartner) return;
     
-    // Показываем индикатор загрузки
     btn.textContent = '⏳';
     btn.disabled = true;
     
     try {
-        // Конвертируем blob URL в blob
         const response = await fetch(audioUrl);
         const blob = await response.blob();
         
@@ -1225,10 +1211,7 @@ async function sendAudioMessage(btn) {
         
         if (!r.ok) throw new Error((await r.json()).error);
         
-        // Удаляем превью
         preview.remove();
-        
-        // Обновляем чат
         lastMessagesHash = '';
         loadMessages();
         loadDialogs();
@@ -1263,12 +1246,10 @@ function updateRecordingTime(seconds) {
     }
 }
 
-// Добавляем кнопку микрофона в чат
 function addMicButton() {
     const chatInput = document.querySelector('.chat-input');
     if (!chatInput) return;
     
-    // Проверяем, есть ли уже кнопка
     if (document.getElementById('micBtn')) return;
     
     const micBtn = document.createElement('button');
@@ -1285,7 +1266,6 @@ function addMicButton() {
         }
     });
     
-    // Вставляем перед кнопкой отправки
     const sendBtn = document.getElementById('sendMessageBtn');
     if (sendBtn) {
         chatInput.insertBefore(micBtn, sendBtn);
@@ -1294,10 +1274,8 @@ function addMicButton() {
     }
 }
 
-// Добавляем обработку аудио в сообщениях
 function addAudioSupportToMessages() {
-    // Переопределяем функцию добавления сообщения
-    const originalAddMessage = window.addMessageToChat;
+    const originalAddMessage = window.addMessageToChat || addMessageToChat;
     if (originalAddMessage) {
         window.addMessageToChat = function(msg) {
             if (msg.audioUrl) {
@@ -1313,8 +1291,10 @@ function addAudioSupportToMessages() {
                 timeDiv.textContent = t;
                 container.appendChild(timeDiv);
                 
-                chatMessages.appendChild(container);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+                if (chatMessages) {
+                    chatMessages.appendChild(container);
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
             } else {
                 originalAddMessage(msg);
             }
@@ -1322,22 +1302,19 @@ function addAudioSupportToMessages() {
     }
 }
 
-// Инициализация голосовых сообщений
 function initVoiceMessages() {
     addMicButton();
     addAudioSupportToMessages();
 }
 
-// Запускаем после загрузки страницы
 document.addEventListener('DOMContentLoaded', function() {
     setTimeout(initVoiceMessages, 500);
 });
 
-// Также добавляем при открытии чата
-const originalOpenChat = window.openChat;
+const originalOpenChatVoice = window.openChat;
 window.openChat = function(uid, un, avUrl) {
-    if (originalOpenChat) {
-        originalOpenChat(uid, un, avUrl);
+    if (originalOpenChatVoice) {
+        originalOpenChatVoice(uid, un, avUrl);
     }
     setTimeout(addMicButton, 200);
     setTimeout(addAudioSupportToMessages, 200);
