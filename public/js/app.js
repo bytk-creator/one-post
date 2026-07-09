@@ -858,6 +858,12 @@ function showTypingIndicator(from, isTyping) {
     console.log('🟣 showTypingIndicator ВЫЗВАН:', from, isTyping);
     console.log('🟣 currentChatPartner:', currentChatPartner);
     
+    // ===== ПОКАЗЫВАЕМ ТОЛЬКО ЕСЛИ ЧАТ ОТКРЫТ =====
+    if (!currentChatPartner || String(currentChatPartner) !== String(from)) {
+        console.log('🟣 Чат с этим пользователем не открыт, игнорируем');
+        return;
+    }
+    
     const chatMessagesEl = document.getElementById('chatMessages');
     if (!chatMessagesEl) {
         console.log('❌ chatMessages не найден');
