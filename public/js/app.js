@@ -359,6 +359,30 @@ setInterval(() => { if (currentChatPartner && !messagesPage.classList.contains('
 setInterval(() => { if (!messagesPage.classList.contains('hidden')) loadDialogs(); }, 5000);
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
+// ========== РОУТИНГ ==========
+window.addEventListener('popstate', () => {
+    const path = location.pathname.replace('/', '') || 'feed';
+    navigateFromURL(path);
+});
+
+function navigateFromURL(page) {
+    sidebarBtns.forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector(`[data-page="${page}"]`);
+    if (btn) btn.classList.add('active');
+    
+    feedPageEl.classList.add('hidden');
+    profilePage.classList.add('hidden');
+    messagesPage.classList.add('hidden');
+    settingsPage.classList.add('hidden');
+    
+    if (page === 'feed') { feedPageEl.classList.remove('hidden'); loadFeed(); }
+    else if (page === 'messages') { messagesPage.classList.remove('hidden'); loadDialogs(); }
+    else if (page === 'settings') { settingsPage.classList.remove('hidden'); loadSettings(); }
+    
+    dialogsSidebar.classList.remove('chat-open');
+    messagesLayout.classList.remove('mobile-view');
+}
+
 (function() {
     const t = localStorage.getItem('token');
     if (t) {
