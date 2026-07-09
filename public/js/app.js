@@ -1231,3 +1231,209 @@ console.log('✅ WebSocket клиент готов');
     
     console.log('✅ Голосовые сообщения готовы!');
 })();
+
+// ===== АУДИО-ПЛЕЕР ДЛЯ СООБЩЕНИЙ =====
+(function audioPlayerFix() {
+    console.log('🎵 Загрузка аудио-плеера...');
+    
+    // Функция создания плеера
+    function createAudioPlayer(audioUrl, duration) {
+        const container = document.createElement('div');
+        container.className = 'audio-message';
+        
+        // Кнопка воспроизведения
+        const playBtn = document.createElement('button');
+        playBtn.className = 'audio-play-btn';
+        playBtn.textContent = '▶';
+        playBtn.dataset.playing = 'false';
+        
+        // Прогресс-бар
+        const progressContainer = document.createElement('div');
+        progressContainer.className = 'audio-progress';
+        const progressBar = document.createElement('div');
+        progressBar.className = 'audio-progress-bar';
+        progressBar.style.width = '0%';
+        progressContainer.appendChild(progressBar);
+        
+        // Время
+        const timeDisplay = document.createElement('span');
+        timeDisplay.className = 'audio-time';
+        timeDisplay.textContent = formatDuration(duration || 0);
+        
+        container.appendChild(playBtn);
+        container.appendChild(progressContainer);
+        container.appendChild(timeDisplay);
+        
+        let audio = null;
+        let isPlaying = false;
+        let progressInterval = null;
+        
+        playBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            
+            if (!audio) {
+                audio = new Audio(audioUrl);
+                audio.addEventListener('ended', function() {
+                    stopPlayback();
+                });
+                audio.addEventListener('timeupdate', function() {
+                    if (audio.duration) {
+                        const percent = (audio.currentTime / audio.duration) * 100;
+                        progressBar.style.width = Math.min(percent, 100) + '%';
+                        const remaining = Math.max(0, audio.duration - audio.currentTime);
+                        timeDisplay.textContent = formatDuration(Math.round(remaining));
+                    }
+                });
+                audio.addEventListener('error', function(e) {
+                    console.error('❌ Ошибка аудио:', e);
+                    showNotification('Ошибка', 'Не удалось воспроизвести аудио', 'system');
+                    stopPlayback();
+                });
+            }
+            
+            if (isPlaying) {
+                stopPlayback();
+            } else {
+                startPlayback();
+            }
+        });
+        
+        function startPlayback() {
+            if (!audio) return;
+            audio.play().catch(function(err) {
+                console.error('❌ Ошибка воспроизведения:', err);
+                showNotification('Ошибка', 'Не удалось воспроизвести аудио', 'system');
+            });
+            isPlaying = true;
+            playBtn.textContent = '⏸';
+            playBtn.dataset.playing = 'true';
+            
+            progressInterval = setInterval(function() {
+                if (audio.duration) {
+                    const remaining = Math.max(0, audio.duration - audio.currentTime);
+                    timeDisplay.textContent = formatDuration(Math.round(remaining));
+                }
+            }, 200);
+        }
+        
+        function stopPlayback() {
+            if (audio) {
+                audio.pause();
+                audio.currentTime = 0;
+            }
+            isPlaying = false;
+            playBtn.textContent = '▶';
+            playBtn.dataset.playing = 'false';
+            progressBar.style.width = '0%';
+            timeDisplay.textContent = formatDuration(duration || 0);
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+        }
+        
+        // Очистка при удалении
+        container.addEventListener('remove', function() {
+            if (audio) {
+                audio.pause();
+                audio = null;
+            }
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+        });
+        
+        return container;
+    }
+    
+    // Форматирование времени
+    function formatDuration(seconds) {
+        if (!seconds || seconds < 0) return '0:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return mins + ':' + String(secs).padStart(2, '0');
+    }
+    
+    // Переопределяем функцию добавления сообщения
+    const originalAddMessage = window.addMessageToChat;
+    
+    window.addMessageToChat = function(msg) {
+        // Если это аудио-сообщение
+        if (msg.audioUrl) {
+            console.log('🎵 Создаём аудио-плеер для:', msg.audioUrl);
+            
+            const container = document.createElement('div');
+            container.className = 'message ' + (String(msg.from) === String(currentUser.id) ? 'message-sent' : 'message-received');
+            
+            // Добавляем плеер
+            const player = createAudioPlayer(msg.audioUrl, msg.duration || 0);
+            container.appendChild(player);
+            
+            // Добавляем время
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            const t = new Date(msg.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            timeDiv.textContent = t;
+            container.appendChild(timeDiv);
+            
+            // Проверяем, есть ли текст (обычно "🎤 Голосовое сообщение")
+            if (msg.text && msg.text !== '🎤 Голосовое сообщение') {
+                const textDiv = document.createElement('div');
+                textDiv.className = 'message-text';
+                textDiv.textContent = msg.text;
+                container.insertBefore(textDiv, container.firstChild);
+            }
+            
+            const chatMessagesEl = document.getElementById('chatMessages');
+            if (chatMessagesEl) {
+                chatMessagesEl.appendChild(container);
+                chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+            }
+            
+            return;
+        }
+        
+        // Если есть оригинальная функция — используем её для остальных сообщений
+        if (typeof originalAddMessage === 'function') {
+            originalAddMessage(msg);
+        }
+    };
+    
+    // Также добавляем обработку для уже загруженных сообщений
+    function fixExistingMessages() {
+        console.log('🔧 Проверка существующих сообщений...');
+        const messages = document.querySelectorAll('.message');
+        messages.forEach(function(msgEl) {
+            // Ищем текст "🎤 Голосовое сообщение"
+            const textEl = msgEl.querySelector('.message-text');
+            if (textEl && textEl.textContent.includes('🎤 Голосовое')) {
+                // Ищем audioUrl в данных
+                const audioUrl = msgEl.dataset.audioUrl;
+                if (audioUrl) {
+                    console.log('🎵 Найдено существующее аудио:', audioUrl);
+                    // Заменяем текст на плеер
+                    const duration = parseInt(msgEl.dataset.duration) || 0;
+                    const player = createAudioPlayer(audioUrl, duration);
+                    textEl.replaceWith(player);
+                }
+            }
+        });
+    }
+    
+    // Запускаем через небольшую задержку
+    setTimeout(fixExistingMessages, 1000);
+    
+    // Также запускаем при загрузке новых сообщений
+    const originalLoadMessages = window.loadMessages;
+    if (typeof originalLoadMessages === 'function') {
+        window.loadMessages = function() {
+            const result = originalLoadMessages.apply(this, arguments);
+            // После загрузки проверяем сообщения
+            setTimeout(fixExistingMessages, 500);
+            return result;
+        };
+    }
+    
+    console.log('✅ Аудио-плеер готов!');
+})();
