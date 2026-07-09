@@ -916,8 +916,10 @@ function openChat(uid, un, avUrl) {
         });
     });
     
+    // Разблокируем поле и кнопку
     messageInput.disabled = false;
-    if (!chatPhoto && !messageInput.value.trim()) sendMessageBtn.disabled = true;
+    sendMessageBtn.disabled = !(messageInput.value.trim() || chatPhoto);
+    
     if (chatCloseBtn) chatCloseBtn.style.display = 'flex';
     
     loadMessages(); 
@@ -928,7 +930,7 @@ function openChat(uid, un, avUrl) {
         messagesLayout.classList.add('mobile-view'); 
     }
     
-    // ===== ВЕШАЕМ ОБРАБОТЧИК TYPING =====
+    // ===== ВЕШАЕМ ОБРАБОТЧИК TYPING И ВКЛЮЧЕНИЕ КНОПКИ =====
     setTimeout(() => {
         const input = document.getElementById('messageInput');
         if (input) {
@@ -936,8 +938,12 @@ function openChat(uid, un, avUrl) {
             const newInput = input.cloneNode(true);
             input.parentNode.replaceChild(newInput, input);
             
-            // Вешаем новый обработчик
+            // Вешаем обработчик для кнопки отправки и typing
             newInput.addEventListener('input', function() {
+                // Включаем/выключаем кнопку отправки
+                sendMessageBtn.disabled = !(this.value.trim() || chatPhoto);
+                
+                // Обработчик typing
                 const hasText = this.value.trim().length > 0;
                 
                 clearTimeout(typingTimer);
@@ -955,7 +961,10 @@ function openChat(uid, un, avUrl) {
             // Обновляем глобальную ссылку
             messageInput = newInput;
             
-            console.log('✅ Обработчик typing добавлен');
+            // Сразу проверяем состояние кнопки
+            sendMessageBtn.disabled = !(messageInput.value.trim() || chatPhoto);
+            
+            console.log('✅ Обработчики добавлены, кнопка:', sendMessageBtn.disabled ? 'заблокирована' : 'активна');
         }
     }, 200);
 }
@@ -971,8 +980,14 @@ function closeChat() {
     currentChatPartner = null;
     lastMessagesHash = '';
     chatPartnerText.textContent = 'Выберите диалог';
-    messageInput.disabled = true;
+    
+    // Блокируем поле и кнопку
+    if (messageInput) {
+        messageInput.disabled = true;
+        messageInput.value = '';
+    }
     sendMessageBtn.disabled = true;
+    
     chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог или найдите пользователя</div>';
     if (chatCloseBtn) chatCloseBtn.style.display = 'none';
     
@@ -1106,7 +1121,7 @@ chatMessages.addEventListener('scroll', () => {
 
 // ===== ОТПРАВКА СООБЩЕНИЙ =====
 async function sendMsg() {
-    const t = messageInput.value.trim();
+    const t = messageInput ? messageInput.value.trim() : '';
     if ((!t && !chatPhoto) || !currentChatPartner) return;
     
     // Очищаем typing
@@ -1145,7 +1160,7 @@ async function sendMsg() {
             }
         }
         
-        messageInput.value = '';
+        if (messageInput) messageInput.value = '';
         chatPhoto = null;
         chatPhotoInput.value = '';
         chatPhotoPreview.classList.add('hidden');
@@ -1160,11 +1175,16 @@ async function sendMsg() {
 }
 
 sendMessageBtn.addEventListener('click', sendMsg);
-messageInput.addEventListener('keypress', (e) => { 
-    if (e.key === 'Enter' && !e.shiftKey) { 
-        e.preventDefault(); 
-        sendMsg(); 
-    } 
+
+// Клавиша Enter для отправки (вешаем на документ, так как messageInput может меняться)
+document.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        const activeInput = document.activeElement;
+        if (activeInput && activeInput.id === 'messageInput' && currentChatPartner) {
+            e.preventDefault();
+            sendMsg();
+        }
+    }
 });
 
 chatAttachBtn.addEventListener('click', () => { chatPhotoInput.click(); });
@@ -1184,7 +1204,7 @@ chatRemovePhoto.addEventListener('click', () => {
     chatPhoto = null; 
     chatPhotoInput.value = ''; 
     chatPhotoPreview.classList.add('hidden'); 
-    sendMessageBtn.disabled = !messageInput.value.trim(); 
+    sendMessageBtn.disabled = !(messageInput && messageInput.value.trim()); 
 });
 replyPreviewClose.addEventListener('click', () => { 
     replyTo = null; 
@@ -1433,8 +1453,6 @@ function addMessageToChat(msg) {
 }
 
 function showTypingIndicator(from, isTyping) {
-    console.log('🟣 showTypingIndicator:', from, isTyping, 'current:', currentChatPartner);
-    
     if (!currentChatPartner || String(currentChatPartner) !== String(from)) return;
     
     const chatMessagesEl = document.getElementById('chatMessages');
@@ -1448,13 +1466,11 @@ function showTypingIndicator(from, isTyping) {
             typingIndicatorEl.innerHTML = 'печатает<span class="typing-dots"><span></span><span></span><span></span></span>';
             chatMessagesEl.appendChild(typingIndicatorEl);
             chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-            console.log('🟣 Индикатор печатания добавлен');
         }
     } else {
         if (typingIndicatorEl) {
             typingIndicatorEl.remove();
             typingIndicatorEl = null;
-            console.log('🟣 Индикатор печатания убран');
         }
     }
 }
@@ -1475,21 +1491,14 @@ function updateOnlineStatusUI(userId, online) {
 
 // ===== TYPING =====
 function sendTypingWithRetry(isTyping, retries = 0) {
-    console.log('📤 sendTypingWithRetry:', isTyping, 'wsConnected:', wsConnected, 'partner:', currentChatPartner);
-    
-    if (!wsConnected || !currentChatPartner) {
-        console.log('❌ Не отправляем typing: нет连接 или партнера');
-        return;
-    }
+    if (!wsConnected || !currentChatPartner) return;
     
     try {
         ws.send(JSON.stringify({
             type: 'typing',
             payload: { to: currentChatPartner, isTyping }
         }));
-        console.log('✅ Typing отправлен:', isTyping);
     } catch (err) {
-        console.error('❌ Ошибка отправки typing:', err);
         if (retries < 3) {
             setTimeout(() => sendTypingWithRetry(isTyping, retries + 1), 200);
         }
