@@ -387,12 +387,15 @@ window.addEventListener('popstate', () => {
         token = t;
         apiCall('/api/me', 'GET').then(d => {
             enterApp(d.user);
-            // После загрузки приложения — перейти на нужную страницу
             const path = location.pathname.replace('/', '') || 'feed';
             setTimeout(() => navigateFromURL(path), 100);
         }).catch(() => {
             localStorage.removeItem('token'); token = '';
+            authBlock.style.display = '';
             authBlock.classList.remove('hidden');
         });
-    } else { authBlock.classList.remove('hidden'); }
+    } else {
+        authBlock.style.display = '';
+        authBlock.classList.remove('hidden');
+    }
 })();
