@@ -668,6 +668,7 @@ let ws = null;
 let wsConnected = false;
 let wsReconnectTimer = null;
 let typingTimer = null;
+let typingIndicatorEl = null;
 
 function connectWebSocket() {
     if (!token || !currentUser) {
@@ -731,6 +732,13 @@ function connectWebSocket() {
 }
 
 function handleWebSocketMessage(data) {
+    console.log('📨 Получено WS сообщение:', data.type, data);
+    
+    if (data.type === 'error') {
+        console.error('❌ WS ошибка:', data.payload);
+        return;
+    }
+    
     switch (data.type) {
         case 'auth_success':
             console.log('✅ WS авторизован');
@@ -760,6 +768,7 @@ function handleWebSocketMessage(data) {
             
         case 'typing': {
             const { from, isTyping } = data.payload;
+            console.log('🔵 Получен typing от', from, 'isTyping:', isTyping);
             showTypingIndicator(from, isTyping);
             break;
         }
@@ -769,10 +778,6 @@ function handleWebSocketMessage(data) {
             break;
             
         case 'pong':
-            break;
-            
-        case 'error':
-            console.error('❌ WS ошибка:', data.payload);
             break;
             
         default:
@@ -816,24 +821,35 @@ function addMessageToChat(msg) {
     chatMessages.appendChild(div);
 }
 
-let typingIndicatorEl = null;
-
 function showTypingIndicator(from, isTyping) {
-    if (currentChatPartner && String(currentChatPartner) === String(from)) {
-        if (isTyping) {
-            if (!typingIndicatorEl) {
-                typingIndicatorEl = document.createElement('div');
-                typingIndicatorEl.id = 'typingIndicator';
-                typingIndicatorEl.className = 'typing-indicator';
-                typingIndicatorEl.textContent = 'печатает...';
-                chatMessages.appendChild(typingIndicatorEl);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-            }
-        } else {
-            if (typingIndicatorEl) {
-                typingIndicatorEl.remove();
-                typingIndicatorEl = null;
-            }
+    console.log('🟣 showTypingIndicator вызван:', from, isTyping, 'currentChatPartner:', currentChatPartner);
+    
+    if (!currentChatPartner || String(currentChatPartner) !== String(from)) {
+        console.log('🟣 Не тот чат или нет партнера');
+        return;
+    }
+    
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) {
+        console.log('❌ chatMessages не найден');
+        return;
+    }
+    
+    if (isTyping) {
+        if (!typingIndicatorEl) {
+            console.log('🟣 Создаём индикатор');
+            typingIndicatorEl = document.createElement('div');
+            typingIndicatorEl.id = 'typingIndicator';
+            typingIndicatorEl.className = 'typing-indicator';
+            typingIndicatorEl.innerHTML = 'печатает<span class="typing-dots"><span></span><span></span><span></span></span>';
+            chatMessages.appendChild(typingIndicatorEl);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    } else {
+        if (typingIndicatorEl) {
+            console.log('🟣 Удаляем индикатор');
+            typingIndicatorEl.remove();
+            typingIndicatorEl = null;
         }
     }
 }
@@ -863,16 +879,22 @@ function updateOnlineStatusUI(userId, online) {
 }
 
 function sendTypingStatus(isTyping) {
-    if (!wsConnected || !currentChatPartner) return;
+    console.log('🟡 sendTypingStatus вызван:', isTyping, 'WS connected:', wsConnected, 'Chat partner:', currentChatPartner);
+    
+    if (!wsConnected || !currentChatPartner) {
+        console.log('❌ Не отправляем: WS не подключен или нет партнера');
+        return;
+    }
     
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => {
         try {
+            console.log('📤 Отправка typing:', isTyping, 'to:', currentChatPartner);
             ws.send(JSON.stringify({
                 type: 'typing',
                 payload: {
                     to: currentChatPartner,
-                    isTyping
+                    isTyping: isTyping
                 }
             }));
         } catch (err) {
@@ -881,15 +903,40 @@ function sendTypingStatus(isTyping) {
     }, 300);
 }
 
-// Сохраняем оригинальные функции
+// ===== ПЕРЕОПРЕДЕЛЯЕМ openChat ДЛЯ ДОБАВЛЕНИЯ ОБРАБОТЧИКА TYPING =====
 const originalOpenChat = window.openChat || openChat;
-const originalEnterApp = window.enterApp || enterApp;
 
-// Переопределяем openChat
 window.openChat = function(uid, un, avUrl) {
+    console.log('📂 openChat вызван для:', uid);
+    
+    // Вызываем оригинальную функцию
     if (originalOpenChat) {
         originalOpenChat(uid, un, avUrl);
     }
+    
+    // Добавляем обработчик для typing
+    const messageInput = document.getElementById('messageInput');
+    if (messageInput && !messageInput._typingHandler) {
+        messageInput._typingHandler = true;
+        console.log('✅ Добавляем обработчик typing на messageInput');
+        
+        messageInput.addEventListener('input', function() {
+            const hasText = this.value.trim().length > 0;
+            console.log('✏️ Ввод:', hasText ? 'есть текст' : 'пусто');
+            
+            if (hasText) {
+                sendTypingStatus(true);
+                clearTimeout(typingTimer);
+                typingTimer = setTimeout(() => {
+                    sendTypingStatus(false);
+                }, 2000);
+            } else {
+                sendTypingStatus(false);
+            }
+        });
+    }
+    
+    // Отправляем статус, что мы в чате
     if (wsConnected) {
         try {
             ws.send(JSON.stringify({
@@ -899,34 +946,34 @@ window.openChat = function(uid, un, avUrl) {
                     isTyping: false
                 }
             }));
-        } catch (err) {}
+        } catch (err) {
+            console.error('❌ Ошибка отправки initial typing:', err);
+        }
     }
 };
 
-// Переопределяем enterApp
+// ===== ПЕРЕОПРЕДЕЛЯЕМ enterApp ДЛЯ ПОДКЛЮЧЕНИЯ WS =====
+const originalEnterApp = window.enterApp || enterApp;
+
 window.enterApp = function(user) {
+    console.log('🚀 enterApp вызван для:', user?.username);
+    
     if (originalEnterApp) {
         originalEnterApp(user);
     }
+    
     setTimeout(() => {
         connectWebSocket();
     }, 1000);
 };
 
-// Перехватываем ввод для отправки статуса печатания
+// ===== ДОПОЛНИТЕЛЬНЫЙ ОБРАБОТЧИК ДЛЯ КНОПКИ ОТПРАВКИ =====
 document.addEventListener('DOMContentLoaded', function() {
-    const messageInput = document.getElementById('messageInput');
-    if (messageInput) {
-        messageInput.addEventListener('input', function() {
-            if (this.value.trim()) {
-                sendTypingStatus(true);
-                clearTimeout(typingTimer);
-                typingTimer = setTimeout(() => {
-                    sendTypingStatus(false);
-                }, 2000);
-            } else {
-                sendTypingStatus(false);
-            }
+    const sendBtn = document.getElementById('sendMessageBtn');
+    if (sendBtn) {
+        sendBtn.addEventListener('click', function() {
+            // Скрываем индикатор печатания при отправке
+            sendTypingStatus(false);
         });
     }
 });
