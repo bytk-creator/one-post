@@ -513,52 +513,6 @@ window.addEventListener('popstate', () => {
     navigateFromURL(path);
 });
 
-// ========== УВЕДОМЛЕНИЯ ==========
-function showNotification(title, text, type = 'system') {
-    // Создаём контейнер если нет
-    let container = document.querySelector('.notification-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.className = 'notification-container';
-        document.body.appendChild(container);
-    }
-    
-    const icons = { like: '❤️', message: '💬', system: '✅' };
-    
-    const notif = document.createElement('div');
-    notif.className = 'notification';
-    notif.innerHTML = `
-        <div class="notif-icon ${type}">${icons[type] || '🔔'}</div>
-        <div class="notif-body">
-            <div class="notif-title">${esc(title)}</div>
-            <div class="notif-text">${esc(text)}</div>
-        </div>
-        <button class="notif-close">✕</button>
-    `;
-    
-    notif.querySelector('.notif-close').addEventListener('click', () => {
-        notif.classList.add('removing');
-        setTimeout(() => notif.remove(), 300);
-    });
-    
-    container.appendChild(notif);
-    
-    // Автоудаление через 4 секунды
-    setTimeout(() => {
-        if (notif.parentNode) {
-            notif.classList.add('removing');
-            setTimeout(() => notif.remove(), 300);
-        }
-    }, 4000);
-    
-    // Максимум 3 уведомления
-    const all = container.querySelectorAll('.notification');
-    if (all.length > 3) {
-        all[0].classList.add('removing');
-        setTimeout(() => all[0].remove(), 300);
-    }
-}
-
 (function() {
     const t = localStorage.getItem('token');
     if (t) {
