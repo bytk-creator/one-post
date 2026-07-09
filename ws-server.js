@@ -102,6 +102,7 @@ function createWebSocketServer(server) {
     
     wss.on('connection', (ws, req) => {
         console.log('🔌 Новое WebSocket подключение');
+        console.log(`📊 Текущее количество клиентов: ${clients.size}`);
         
         let userId = null;
         const url = new URL(req.url, `http://${req.headers.host}`);
@@ -156,6 +157,8 @@ function createWebSocketServer(server) {
                     userId = String(user.id);
                     clients.set(userId, ws);
                     console.log(`✅ Пользователь ${userId} (${user.username}) подключён`);
+                    console.log(`📊 Клиент добавлен. Всего клиентов: ${clients.size}`);
+                    console.log(`📊 Список клиентов: ${Array.from(clients.keys()).join(', ')}`);
                     
                     ws.send(JSON.stringify({ 
                         type: 'auth_success', 
@@ -226,6 +229,8 @@ function createWebSocketServer(server) {
                             payload: msgData
                         }));
                         console.log('📤 Сообщение отправлено получателю');
+                    } else {
+                        console.log('⚠️ Получатель не в сети');
                     }
                     
                     ws.send(JSON.stringify({
@@ -235,19 +240,55 @@ function createWebSocketServer(server) {
                     return;
                 }
                 
+                // ===== FIX: ОБРАБОТКА TYPING С ОТПРАВКОЙ ВСЕМ =====
                 if (data.type === 'typing' && userId) {
-                    console.log('⌨️ Typing от', userId);
+                    console.log('⌨️ Typing от', userId, 'to:', data.payload?.to);
                     const { to, isTyping } = data.payload || {};
-                    if (!to) return;
                     
-                    const targetWs = clients.get(String(to));
-                    if (targetWs && targetWs.readyState === WebSocket.OPEN) {
-                        targetWs.send(JSON.stringify({
-                            type: 'typing',
-                            payload: { from: String(userId), isTyping: !!isTyping }
-                        }));
-                        console.log('📤 Typing отправлен');
+                    if (!to) {
+                        console.log('⚠️ Нет получателя для typing');
+                        return;
                     }
+                    
+                    const payload = JSON.stringify({
+                        type: 'typing',
+                        payload: { from: String(userId), isTyping: !!isTyping }
+                    });
+                    
+                    console.log(`📊 Всего клиентов: ${clients.size}`);
+                    console.log(`📊 ID клиентов: ${Array.from(clients.keys()).join(', ')}`);
+                    
+                    let sent = 0;
+                    // Отправляем ВСЕМ клиентам, кроме отправителя
+                    for (const [id, client] of clients) {
+                        if (client.readyState === WebSocket.OPEN && String(id) !== String(userId)) {
+                            try {
+                                client.send(payload);
+                                sent++;
+                                console.log(`✅ Typing отправлен клиенту ${id}`);
+                            } catch (err) {
+                                console.error(`❌ Ошибка отправки клиенту ${id}:`, err);
+                            }
+                        }
+                    }
+                    
+                    console.log(`📊 Отправлено ${sent} клиентам из ${clients.size - 1}`);
+                    
+                    // Если никому не отправили — пробуем отправить конкретному получателю
+                    if (sent === 0) {
+                        const targetWs = clients.get(String(to));
+                        if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+                            try {
+                                targetWs.send(payload);
+                                console.log(`✅ Typing отправлен конкретному получателю ${to}`);
+                            } catch (err) {
+                                console.error('❌ Ошибка отправки:', err);
+                            }
+                        } else {
+                            console.log(`⚠️ Получатель ${to} не найден в клиентах или не в сети`);
+                        }
+                    }
+                    
                     return;
                 }
                 
@@ -272,6 +313,7 @@ function createWebSocketServer(server) {
             if (userId) {
                 clients.delete(userId);
                 broadcastOnlineStatus(userId, false);
+                console.log(`📊 Всего клиентов: ${clients.size}`);
             }
         });
         
