@@ -30,7 +30,7 @@ async function initDb() {
     }
     db.run(`CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL,
-        bio TEXT DEFAULT '', avatarUrl TEXT, createdAt TEXT NOT NULL,
+        bio TEXT DEFAULT '', avatarUrl TEXT, coverUrl TEXT DEFAULT '', createdAt TEXT NOT NULL,
         lastSeen TEXT DEFAULT '')`);
     db.run(`CREATE TABLE IF NOT EXISTS sessions (
         token TEXT PRIMARY KEY, userId TEXT NOT NULL, createdAt TEXT NOT NULL)`);
@@ -198,7 +198,7 @@ const server = http.createServer(async (req, res) => {
         if (password.length < 4) return serveJSON(res, { error: 'Пароль минимум 4 символа' }, 400);
         if (queryOne('SELECT id FROM users WHERE username = ?', [username])) return serveJSON(res, { error: 'Пользователь уже существует' }, 400);
         const userId = Date.now().toString();
-        runSql('INSERT INTO users (id, username, password, bio, avatarUrl, createdAt, lastSeen) VALUES (?, ?, ?, ?, ?, ?, ?)', [userId, username, hashPassword(password), '', null, new Date().toISOString(), new Date().toISOString()]);
+        runSql('INSERT INTO users (id, username, password, bio, avatarUrl, coverUrl, createdAt, lastSeen) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [userId, username, hashPassword(password), '', null, '', new Date().toISOString(), new Date().toISOString()]);
         const token = crypto.randomBytes(32).toString('hex');
         runSql('INSERT OR REPLACE INTO sessions (token, userId, createdAt) VALUES (?, ?, ?)', [token, userId, new Date().toISOString()]);
         return serveJSON(res, { success: true, token, user: { id: userId, username } });
@@ -218,7 +218,7 @@ const server = http.createServer(async (req, res) => {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
         const today = new Date().toISOString().split('T')[0];
         const count = queryOne('SELECT COUNT(*) as count FROM posts WHERE userId = ? AND date = ?', [currentUser.id, today]);
-        return serveJSON(res, { user: { id: currentUser.id, username: currentUser.username, bio: currentUser.bio || '', avatarUrl: currentUser.avatarUrl, createdAt: currentUser.createdAt }, canPost: count.count === 0 });
+        return serveJSON(res, { user: { id: currentUser.id, username: currentUser.username, bio: currentUser.bio || '', avatarUrl: currentUser.avatarUrl, coverUrl: currentUser.coverUrl || '', createdAt: currentUser.createdAt }, canPost: count.count === 0 });
     }
 
     if (url === '/api/ping' && method === 'POST') {
@@ -243,7 +243,7 @@ const server = http.createServer(async (req, res) => {
                 if (dates[i] === prev.toISOString().split('T')[0]) streak++; else break;
             }
         }
-        return serveJSON(res, { id: user.id, username: user.username, bio: user.bio || '', avatarUrl: user.avatarUrl, createdAt: user.createdAt, totalPosts: posts.length, streak, online: isOnline(user.lastSeen), lastSeen: user.lastSeen });
+        return serveJSON(res, { id: user.id, username: user.username, bio: user.bio || '', avatarUrl: user.avatarUrl, coverUrl: user.coverUrl || '', createdAt: user.createdAt, totalPosts: posts.length, streak, online: isOnline(user.lastSeen), lastSeen: user.lastSeen });
     }
 
     if (url.match(/^\/api\/user\/[^/]+\/posts$/) && method === 'GET') {
@@ -315,7 +315,7 @@ const server = http.createServer(async (req, res) => {
 
     if (url === '/api/settings' && method === 'GET') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
-        return serveJSON(res, { username: currentUser.username, bio: currentUser.bio || '', avatarUrl: currentUser.avatarUrl });
+        return serveJSON(res, { username: currentUser.username, bio: currentUser.bio || '', avatarUrl: currentUser.avatarUrl, coverUrl: currentUser.coverUrl || '' });
     }
 
     if (url === '/api/settings' && method === 'POST') {
@@ -332,6 +332,16 @@ const server = http.createServer(async (req, res) => {
                 const avatarUrl = '/uploads/' + fileName;
                 runSql('UPDATE users SET avatarUrl = ? WHERE id = ?', [avatarUrl, currentUser.id]);
                 return serveJSON(res, { success: true, avatarUrl });
+            }
+            if (files.cover && files.cover[0]) {
+                const file = files.cover[0];
+                const ext = path.extname(file.originalFilename || '.jpg');
+                const fileName = 'cover-' + currentUser.id + ext;
+                if (currentUser.coverUrl) { const oldPath = path.join(__dirname, 'public', currentUser.coverUrl); if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath); }
+                fs.renameSync(file.filepath, path.join(UPLOADS_DIR, fileName));
+                const coverUrl = '/uploads/' + fileName;
+                runSql('UPDATE users SET coverUrl = ? WHERE id = ?', [coverUrl, currentUser.id]);
+                return serveJSON(res, { success: true, coverUrl });
             }
             return serveJSON(res, { success: true });
         }
