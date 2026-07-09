@@ -387,9 +387,22 @@ setInterval(() => { if (currentChatPartner && !messagesPage.classList.contains('
 setInterval(() => { if (!messagesPage.classList.contains('hidden')) loadDialogs(); }, 5000);
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-// ========== РОУТИНГ ==========
 function navigateFromURL(page) {
     sidebarBtns.forEach(b => b.classList.remove('active'));
+    
+    // Если это профиль (/profile/12345) — показываем feed как основу
+    if (page.startsWith('profile/')) {
+        const userId = page.split('/')[1];
+        feedPageEl.classList.add('hidden');
+        profilePage.classList.remove('hidden');
+        messagesPage.classList.add('hidden');
+        settingsPage.classList.add('hidden');
+        dialogsSidebar.classList.remove('chat-open');
+        messagesLayout.classList.remove('mobile-view');
+        if (userId && currentUser) viewProfile(userId);
+        return;
+    }
+    
     const btn = document.querySelector(`[data-page="${page}"]`);
     if (btn) btn.classList.add('active');
     
@@ -405,11 +418,6 @@ function navigateFromURL(page) {
     dialogsSidebar.classList.remove('chat-open');
     messagesLayout.classList.remove('mobile-view');
 }
-
-window.addEventListener('popstate', () => {
-    const path = location.pathname.replace('/', '') || 'feed';
-    navigateFromURL(path);
-});
 
 (function() {
     const t = localStorage.getItem('token');
