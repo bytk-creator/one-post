@@ -73,8 +73,13 @@ const logoutBtnMobile = document.getElementById('logoutBtnMobile');
 const logoutBtnDesktop = document.getElementById('logoutBtnDesktop');
 
 function applyTheme(dark) {
-    document.documentElement.toggleAttribute('data-theme', dark);
-    if (themeToggle) themeToggle.checked = dark;
+    if (dark) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        if (themeToggle) themeToggle.checked = true;
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        if (themeToggle) themeToggle.checked = false;
+    }
 }
 const savedTheme = localStorage.getItem('theme');
 applyTheme(savedTheme === 'dark' || (!savedTheme && matchMedia('(prefers-color-scheme:dark)').matches));
