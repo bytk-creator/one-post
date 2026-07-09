@@ -1,4 +1,4 @@
-const CACHE_NAME = 'one-post-v31';
+const CACHE_NAME = 'one-post-v32';
 
 const ASSETS = [
     '/css/style.css', 
