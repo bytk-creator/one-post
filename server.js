@@ -30,7 +30,8 @@ async function initDb() {
     }
     db.run(`CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL,
-        bio TEXT DEFAULT '', avatarUrl TEXT, createdAt TEXT NOT NULL)`);
+        bio TEXT DEFAULT '', avatarUrl TEXT, createdAt TEXT NOT NULL,
+        lastSeen TEXT DEFAULT '')`);
     db.run(`CREATE TABLE IF NOT EXISTS sessions (
         token TEXT PRIMARY KEY, userId TEXT NOT NULL, createdAt TEXT NOT NULL)`);
     db.run(`CREATE TABLE IF NOT EXISTS posts (
@@ -159,6 +160,11 @@ function parseMsgText(text) {
     } catch (e) { return { text, imageUrl: null }; }
 }
 
+function isOnline(lastSeen) {
+    if (!lastSeen) return false;
+    return (new Date() - new Date(lastSeen)) < 60000;
+}
+
 // Генерация PWA-иконок
 (function generateIcons() {
     [192, 512].forEach(size => {
@@ -188,12 +194,12 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/register' && method === 'POST') {
         const { username, password } = await readBody(req);
         if (!username || !password) return serveJSON(res, { error: 'Логин и пароль обязательны' }, 400);
-        if (username.length < 3) return serveJSON(res, { error: 'OneID минимум 3 символа' }, 400);
+        if (username.length < 3) return serveJSON(res, { error: 'Логин минимум 3 символа' }, 400);
         if (!/^[a-zA-Z0-9_]+$/.test(username)) return serveJSON(res, { error: 'OneID: только английские буквы, цифры и _' }, 400);
         if (password.length < 4) return serveJSON(res, { error: 'Пароль минимум 4 символа' }, 400);
         if (queryOne('SELECT id FROM users WHERE username = ?', [username])) return serveJSON(res, { error: 'Пользователь уже существует' }, 400);
         const userId = Date.now().toString();
-        runSql('INSERT INTO users (id, username, password, bio, avatarUrl, createdAt) VALUES (?, ?, ?, ?, ?, ?)', [userId, username, hashPassword(password), '', null, new Date().toISOString()]);
+        runSql('INSERT INTO users (id, username, password, bio, avatarUrl, createdAt, lastSeen) VALUES (?, ?, ?, ?, ?, ?, ?)', [userId, username, hashPassword(password), '', null, new Date().toISOString(), new Date().toISOString()]);
         const token = crypto.randomBytes(32).toString('hex');
         runSql('INSERT OR REPLACE INTO sessions (token, userId, createdAt) VALUES (?, ?, ?)', [token, userId, new Date().toISOString()]);
         return serveJSON(res, { success: true, token, user: { id: userId, username } });
@@ -205,6 +211,7 @@ const server = http.createServer(async (req, res) => {
         if (!user || user.password !== hashPassword(password)) return serveJSON(res, { error: 'Неверный логин или пароль' }, 401);
         const token = crypto.randomBytes(32).toString('hex');
         runSql('INSERT OR REPLACE INTO sessions (token, userId, createdAt) VALUES (?, ?, ?)', [token, user.id, new Date().toISOString()]);
+        runSql('UPDATE users SET lastSeen = ? WHERE id = ?', [new Date().toISOString(), user.id]);
         return serveJSON(res, { success: true, token, user: { id: user.id, username: user.username } });
     }
 
@@ -213,6 +220,12 @@ const server = http.createServer(async (req, res) => {
         const today = new Date().toISOString().split('T')[0];
         const count = queryOne('SELECT COUNT(*) as count FROM posts WHERE userId = ? AND date = ?', [currentUser.id, today]);
         return serveJSON(res, { user: { id: currentUser.id, username: currentUser.username, bio: currentUser.bio || '', avatarUrl: currentUser.avatarUrl, createdAt: currentUser.createdAt }, canPost: count.count === 0 });
+    }
+
+    if (url === '/api/ping' && method === 'POST') {
+        if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
+        runSql('UPDATE users SET lastSeen = ? WHERE id = ?', [new Date().toISOString(), currentUser.id]);
+        return serveJSON(res, { success: true });
     }
 
     if (url.match(/^\/api\/user\/[^/]+$/) && method === 'GET') {
@@ -231,7 +244,7 @@ const server = http.createServer(async (req, res) => {
                 if (dates[i] === prev.toISOString().split('T')[0]) streak++; else break;
             }
         }
-        return serveJSON(res, { id: user.id, username: user.username, bio: user.bio || '', avatarUrl: user.avatarUrl, createdAt: user.createdAt, totalPosts: posts.length, streak });
+        return serveJSON(res, { id: user.id, username: user.username, bio: user.bio || '', avatarUrl: user.avatarUrl, createdAt: user.createdAt, totalPosts: posts.length, streak, online: isOnline(user.lastSeen), lastSeen: user.lastSeen });
     }
 
     if (url.match(/^\/api\/user\/[^/]+\/posts$/) && method === 'GET') {
@@ -327,6 +340,7 @@ const server = http.createServer(async (req, res) => {
         const newUsername = username !== undefined ? username.trim() : currentUser.username;
         const newPassword = password && password.trim() ? hashPassword(password.trim()) : currentUser.password;
         const newBio = bio !== undefined ? (bio || '').substring(0, 200) : (currentUser.bio || '');
+        if (!/^[a-zA-Z0-9_]+$/.test(newUsername)) return serveJSON(res, { error: 'OneID: только английские буквы, цифры и _' }, 400);
         if (newUsername.length < 3) return serveJSON(res, { error: 'Имя минимум 3 символа' }, 400);
         if (password && password.trim() && password.trim().length < 4) return serveJSON(res, { error: 'Пароль минимум 4 символа' }, 400);
         runSql('UPDATE users SET username = ?, password = ?, bio = ? WHERE id = ?', [newUsername, newPassword, newBio, currentUser.id]);
@@ -342,7 +356,7 @@ const server = http.createServer(async (req, res) => {
             if (!partner) continue;
             const lastMsg = queryOne('SELECT * FROM messages WHERE (fromUserId = ? AND toUserId = ?) OR (fromUserId = ? AND toUserId = ?) ORDER BY time DESC LIMIT 1', [currentUser.id, partner.id, partner.id, currentUser.id]);
             const unread = queryOne('SELECT COUNT(*) as count FROM messages WHERE toUserId = ? AND fromUserId = ? AND read = 0', [currentUser.id, partner.id]).count;
-            dialogs.push({ userId: String(partner.id), username: partner.username, avatarUrl: partner.avatarUrl, lastMessage: lastMsg ? parseLastMsg(lastMsg.text) : '', lastTime: lastMsg ? lastMsg.time : '', unread });
+            dialogs.push({ userId: String(partner.id), username: partner.username, avatarUrl: partner.avatarUrl, lastMessage: lastMsg ? parseLastMsg(lastMsg.text) : '', lastTime: lastMsg ? lastMsg.time : '', unread, online: isOnline(partner.lastSeen) });
         }
         dialogs.sort((a, b) => b.lastTime.localeCompare(a.lastTime));
         return serveJSON(res, dialogs);
@@ -406,9 +420,9 @@ const server = http.createServer(async (req, res) => {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
         const urlObj = new URL(url, 'http://localhost');
         const q = (urlObj.searchParams.get('q') || '').trim().toLowerCase();
-        const users = queryAll('SELECT id, username, avatarUrl FROM users WHERE id != ?', [currentUser.id]);
+        const users = queryAll('SELECT id, username, avatarUrl, lastSeen FROM users WHERE id != ?', [currentUser.id]);
         const filtered = users.filter(u => u.username.toLowerCase().includes(q)).slice(0, 10);
-        return serveJSON(res, filtered.map(u => ({ id: String(u.id), username: u.username, avatarUrl: u.avatarUrl })));
+        return serveJSON(res, filtered.map(u => ({ id: String(u.id), username: u.username, avatarUrl: u.avatarUrl, online: isOnline(u.lastSeen) })));
     }
 
     if (url === '/api/unread' && method === 'GET') {
