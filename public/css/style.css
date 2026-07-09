@@ -462,3 +462,7 @@ input, textarea, select, button { font-size: 16px !important; }
 [data-theme="dark"] .typing-dots span {
     background: var(--text-secondary);
 }
+
+[data-theme="dark"] .typing-dots span {
+    background: var(--text-secondary);
+}
