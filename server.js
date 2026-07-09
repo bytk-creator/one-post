@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const formidable = require('formidable');
 const initSqlJs = require('sql.js');
+const { createWebSocketServer, clients, broadcastOnlineStatus } = require('./ws-server');
 
 const DATA_DIR = path.join(__dirname, 'data');
 const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
@@ -194,29 +195,19 @@ function isOnline(lastSeen) {
 }
 
 // ===== WEBSOCKET ИНТЕГРАЦИЯ =====
-let wsClients = new Map();
-let broadcastOnlineStatus = () => {};
-let sendMessageViaWS = () => false;
+let wsClients = clients || new Map();
 
-try {
-    const wsModule = require('./ws-server');
-    wsClients = wsModule.clients || new Map();
-    broadcastOnlineStatus = wsModule.broadcastOnlineStatus || (() => {});
-    sendMessageViaWS = function(to, message) {
-        const targetWs = wsClients.get(String(to));
-        if (targetWs && targetWs.readyState === 1) {
-            try {
-                targetWs.send(JSON.stringify(message));
-                return true;
-            } catch (err) {
-                return false;
-            }
+function sendMessageViaWS(to, message) {
+    const targetWs = wsClients.get(String(to));
+    if (targetWs && targetWs.readyState === 1) {
+        try {
+            targetWs.send(JSON.stringify(message));
+            return true;
+        } catch (err) {
+            return false;
         }
-        return false;
-    };
-    console.log('✅ WebSocket сервер интегрирован');
-} catch (err) {
-    console.log('ℹ️ WebSocket сервер не запущен');
+    }
+    return false;
 }
 
 // Генерация иконок
@@ -541,7 +532,6 @@ const server = http.createServer(async (req, res) => {
         const storedText = JSON.stringify({ text: sanitizedText, imageUrl, replyTo, replyToText });
         runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, String(to), storedText, new Date().toISOString()]);
         
-        // Отправка через WebSocket
         sendMessageViaWS(to, {
             type: 'new_message',
             payload: {
@@ -577,7 +567,6 @@ const server = http.createServer(async (req, res) => {
         const storedText = JSON.stringify({ text: sanitizedText, imageUrl: null, replyTo: replyTo || null, replyToText: sanitizedReplyText });
         runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, String(to), storedText, new Date().toISOString()]);
         
-        // Отправка через WebSocket
         sendMessageViaWS(to, {
             type: 'new_message',
             payload: {
@@ -629,7 +618,12 @@ const server = http.createServer(async (req, res) => {
 
 initDb().then(() => {
     const PORT = process.env.PORT || 3000;
-    server.listen(PORT, '0.0.0.0', () => console.log('🚀 Сервер запущен на порту ' + PORT));
+    server.listen(PORT, '0.0.0.0', () => {
+        console.log('🚀 Сервер запущен на порту ' + PORT);
+        // Создаём WebSocket на том же порту
+        createWebSocketServer(server);
+        console.log('✅ WebSocket сервер интегрирован на порту ' + PORT);
+    });
 });
 
 // Graceful shutdown
