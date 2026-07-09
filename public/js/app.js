@@ -165,14 +165,33 @@ document.getElementById('regPassword').addEventListener('input', function() {
 // ===== API ВЫЗОВЫ =====
 async function apiCall(url, method, body = null) {
     const h = {};
-    if (body && !(body instanceof FormData)) h['Content-Type'] = 'application/json';
-    if (token) h['Authorization'] = 'Bearer ' + token;
+    if (body && !(body instanceof FormData)) {
+        h['Content-Type'] = 'application/json';
+    }
+    if (token) {
+        h['Authorization'] = 'Bearer ' + token;
+    }
+    
     const o = { method, headers: h };
-    if (body) o.body = body instanceof FormData ? body : JSON.stringify(body);
-    const r = await fetch(url, o); 
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Ошибка'); 
-    return d;
+    if (body) {
+        o.body = body instanceof FormData ? body : JSON.stringify(body);
+    }
+    
+    try {
+        const r = await fetch(url, o);
+        const d = await r.json();
+        
+        if (!r.ok) {
+            if (r.status === 401) {
+                console.log('🔒 Требуется авторизация');
+            }
+            throw new Error(d.error || 'Ошибка сервера');
+        }
+        
+        return d;
+    } catch (err) {
+        throw err;
+    }
 }
 
 // ===== РЕГИСТРАЦИЯ =====
@@ -205,6 +224,8 @@ document.getElementById('registerFormEl').addEventListener('submit', async (e) =
         enterApp(d.user);
     } catch (err) { 
         document.getElementById('registerError').textContent = err.message; 
+        generateCaptcha();
+        document.getElementById('captchaAnswer').value = '';
     }
 });
 
@@ -229,20 +250,30 @@ function logout() {
     localStorage.removeItem('token');
     token = '';
     clearInterval(unreadInterval);
-    if (ws) ws.close();
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+    wsConnected = false;
     appBlock.classList.add('hidden');
     authBlock.classList.remove('hidden');
     currentUser = null;
+    currentChatPartner = null;
     history.pushState({}, '', '/');
 }
 logoutBtnMobile.addEventListener('click', logout);
 logoutBtnDesktop.addEventListener('click', logout);
 
+// ===== ВХОД В ПРИЛОЖЕНИЕ =====
 function enterApp(user) {
     currentUser = user;
     currentUser.id = String(currentUser.id);
     authBlock.classList.add('hidden');
     appBlock.classList.remove('hidden');
+    
+    updateAllUI();
+    updateCreatePostUI();
+    loadFeed();
     startApp();
 }
 
@@ -252,20 +283,27 @@ async function startApp() {
         currentUser = d.user; 
         currentUser.id = String(currentUser.id); 
         canPostToday = d.canPost;
+        
         updateAllUI(); 
         updateCreatePostUI();
+        
         unreadInterval = setInterval(updateUnreadBadge, 5000);
         setInterval(() => { if (token) apiCall('/api/ping', 'POST').catch(() => {}); }, 30000);
         apiCall('/api/ping', 'POST').catch(() => {});
         
         setTimeout(() => connectWebSocket(), 500);
         setupVoiceButton();
-    } catch (err) { 
-        logout(); 
+        
+        console.log('✅ Приложение запущено');
+    } catch (err) {
+        console.error('❌ Ошибка запуска:', err.message);
+        // НЕ выходим из приложения при ошибке /api/me
+        // Просто продолжаем работу с теми данными что есть
     }
 }
 
 function updateAllUI() {
+    if (!currentUser) return;
     const a = currentUser.avatarUrl ? 
         `<img src="${currentUser.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : 
         currentUser.username.charAt(0).toUpperCase();
@@ -387,7 +425,7 @@ async function loadFeed(append = false) {
         if (!append) {
             feedContainer.innerHTML = '<div class="feed-title">Новости</div>';
             if (!posts || !posts.length) {
-                feedContainer.innerHTML = '<div class="empty-feed"><div class="empty-icon">...</div><h3>Лента пуста</h3><p>Станьте первым!</p></div>';
+                feedContainer.innerHTML = '<div class="empty-feed"><div class="empty-icon"><svg viewBox="0 0 80 80" width="64" height="64"><rect x="12" y="16" width="56" height="48" rx="8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><line x1="24" y1="32" x2="56" y2="32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="24" y1="42" x2="48" y2="42" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/></svg></div><h3>Лента пуста</h3><p>Станьте первым!</p></div>';
                 feedLoading = false; 
                 return;
             }
@@ -414,7 +452,7 @@ async function loadFeed(append = false) {
                 `<img src="${post.authorAvatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" loading="lazy">` : 
                 post.author.charAt(0).toUpperCase();
             const del = (currentUser && String(post.userId) === String(currentUser.id)) ? 
-                `<button class="post-delete-btn">...</button>` : '';
+                `<button class="post-delete-btn"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6h14M10 11v6m4-6v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : '';
             
             div.innerHTML = `
                 <div class="post-header">
@@ -561,7 +599,7 @@ async function viewProfile(userId) {
                 });
                 const li = likesData[post.id] || { count: 0, liked: false };
                 const del = (currentUser && String(post.userId) === String(currentUser.id)) ? 
-                    `<button class="post-delete-btn">...</button>` : '';
+                    `<button class="post-delete-btn"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6h14M10 11v6m4-6v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : '';
                 
                 div.innerHTML = `
                     <div class="post-body">
@@ -569,7 +607,7 @@ async function viewProfile(userId) {
                         ${post.imageUrl ? `<img src="${post.imageUrl}" class="post-image" alt="Фото" loading="lazy">` : ''}
                         <div class="post-time">${ts}</div>
                     </div>
-                    <div class="post-footer">
+                    <div class="post-footer" style="display:flex;align-items:center;justify-content:space-between;">
                         <button class="like-btn ${li.liked ? 'liked' : ''}">
                             <span class="like-icon">${li.liked ? '❤️' : '🤍'}</span>
                             <span class="like-count">${li.count > 0 ? li.count : ''}</span>
@@ -800,14 +838,18 @@ searchUserInput.addEventListener('input', () => {
             searchResults.classList.remove('hidden'); 
             searchResults.innerHTML = ''; 
             if (!users.length) 
-                searchResults.innerHTML = '<div class="search-result-item">Никого нет</div>'; 
+                searchResults.innerHTML = '<div class="search-result-item" style="color:var(--text-secondary);">Никого нет</div>'; 
             users.forEach(u => { 
                 const div = document.createElement('div'); 
                 div.className = 'search-result-item'; 
-                div.innerHTML = (u.avatarUrl ? 
-                    `<img src="${u.avatarUrl}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">` : 
-                    `<div style="width:36px;height:36px;border-radius:50%;background:var(--avatar-gradient);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;">${u.username.charAt(0)}</div>`) +
-                    `<span>${esc(u.username)}</span>`; 
+                div.style.display = 'flex';
+                div.style.alignItems = 'center';
+                div.style.gap = '10px';
+                div.style.padding = '12px 14px';
+                const av = u.avatarUrl ? 
+                    `<img src="${u.avatarUrl}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : 
+                    `<div style="width:36px;height:36px;border-radius:50%;background:var(--avatar-gradient);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;">${u.username.charAt(0).toUpperCase()}</div>`; 
+                div.innerHTML = av + '<span style="font-size:14px;font-weight:600;">' + esc(u.username) + '</span>'; 
                 div.addEventListener('click', () => { 
                     openChat(u.id, u.username, u.avatarUrl); 
                     searchUserInput.value = ''; 
@@ -821,7 +863,6 @@ searchUserInput.addEventListener('input', () => {
 
 // ===== ОТКРЫТИЕ ЧАТА =====
 function openChat(uid, un, avUrl) {
-    // Очищаем старые аудио-плееры
     document.querySelectorAll('audio').forEach(a => {
         a.pause();
         a.src = '';
@@ -840,7 +881,7 @@ function openChat(uid, un, avUrl) {
     apiCall('/api/user/' + uid, 'GET').then(user => {
         const dot = onlineDot(user.online);
         chatPartnerText.innerHTML = `
-            <span class="chat-partner-info" data-userid="${uid}">
+            <span class="chat-partner-info" data-userid="${uid}" style="display:flex;align-items:center;gap:10px;cursor:pointer;">
                 ${av}<span>${esc(un)}${dot}</span>
             </span>`;
         chatPartnerText.querySelector('.chat-partner-info')?.addEventListener('click', (e) => { 
@@ -849,7 +890,7 @@ function openChat(uid, un, avUrl) {
         });
     }).catch(() => {
         chatPartnerText.innerHTML = `
-            <span class="chat-partner-info" data-userid="${uid}">
+            <span class="chat-partner-info" data-userid="${uid}" style="display:flex;align-items:center;gap:10px;cursor:pointer;">
                 ${av}<span>${esc(un)}</span>
             </span>`;
         chatPartnerText.querySelector('.chat-partner-info')?.addEventListener('click', (e) => { 
@@ -872,7 +913,6 @@ function openChat(uid, un, avUrl) {
 }
 
 function closeChat() {
-    // Очищаем аудио при закрытии
     document.querySelectorAll('audio').forEach(a => {
         a.pause();
         a.src = '';
@@ -1038,7 +1078,6 @@ async function sendMsg() {
             }
             await apiCall('/api/messages/photo', 'POST', fd);
         } else {
-            // Отправляем через WebSocket если доступен
             if (wsConnected) {
                 ws.send(JSON.stringify({
                     type: 'message',
@@ -1050,7 +1089,6 @@ async function sendMsg() {
                     }
                 }));
             } else {
-                // Fallback на HTTP
                 const body = { to: currentChatPartner, text: t };
                 if (replyTo) { 
                     body.replyTo = replyTo; 
@@ -1106,7 +1144,6 @@ replyPreviewClose.addEventListener('click', () => {
     replyPreview.classList.add('hidden'); 
 });
 
-// Автообновление сообщений
 setInterval(() => { 
     if (currentChatPartner && !messagesPage.classList.contains('hidden') && 
         chatMessages.scrollTop > chatMessages.scrollHeight - chatMessages.clientHeight - 200) 
@@ -1287,6 +1324,10 @@ function handleWebSocketMessage(data) {
             
         case 'pong':
             break;
+            
+        case 'error':
+            console.error('❌ WS ошибка:', data.payload);
+            break;
     }
 }
 
@@ -1370,13 +1411,18 @@ function showTypingIndicator(from, isTyping) {
 function updateOnlineStatusUI(userId, online) {
     const dialogItems = document.querySelectorAll('.dialog-item');
     dialogItems.forEach(item => {
-        // Обновление статуса в списке диалогов
+        // Можно добавить обновление онлайн-статуса в списке диалогов
     });
     
     if (currentChatPartner && String(currentChatPartner) === String(userId)) {
         const partnerInfo = document.querySelector('.chat-partner-info');
         if (partnerInfo) {
-            // Обновление точки онлайн в шапке чата
+            const dot = online ? '<span style="display:inline-block;width:10px;height:10px;background:#10B981;border-radius:50%;margin-left:6px;" title="Онлайн"></span>' : '';
+            const nameEl = partnerInfo.querySelector('span');
+            if (nameEl) {
+                const name = nameEl.textContent.replace(/<[^>]*>.*?<\/span>/, '').trim();
+                nameEl.innerHTML = name + dot;
+            }
         }
     }
 }
@@ -1536,7 +1582,6 @@ function startRecording() {
             
             mediaRecorder.start(1000);
             
-            // Автостоп через 60 секунд
             setTimeout(function() {
                 if (mediaRecorder && mediaRecorder.state === 'recording') {
                     mediaRecorder.stop();
@@ -1583,7 +1628,6 @@ async function sendVoiceMessage(blob) {
             method: 'POST',
             headers: {
                 'Authorization': 'Bearer ' + token
-                // Content-Type не указываем — браузер сам добавит с boundary
             },
             body: formData
         });
@@ -1617,22 +1661,36 @@ document.addEventListener('DOMContentLoaded', function() {
     setupVoiceButton();
 });
 
-// Автозапуск если уже есть токен
+// ===== АВТОЗАПУСК =====
 (function() {
     const t = localStorage.getItem('token');
     if (t) {
         token = t;
-        apiCall('/api/me', 'GET').then(d => {
-            enterApp(d.user);
-            const path = location.pathname.replace('/', '') || 'feed';
-            if (path === 'feed' || path === 'messages' || path === 'settings') {
-                setTimeout(() => navigateFromURL(path), 100);
-            }
-        }).catch(() => {
-            localStorage.removeItem('token'); 
-            token = '';
-            authBlock.classList.remove('hidden');
-        });
+        apiCall('/api/me', 'GET')
+            .then(d => {
+                currentUser = d.user;
+                currentUser.id = String(currentUser.id);
+                canPostToday = d.canPost;
+                
+                authBlock.classList.add('hidden');
+                appBlock.classList.remove('hidden');
+                
+                updateAllUI();
+                updateCreatePostUI();
+                loadFeed();
+                startApp();
+                
+                const path = location.pathname.replace('/', '') || 'feed';
+                if (path === 'feed' || path === 'messages' || path === 'settings') {
+                    setTimeout(() => navigateFromURL(path), 100);
+                }
+            })
+            .catch(err => {
+                console.error('Ошибка автозапуска:', err.message);
+                localStorage.removeItem('token');
+                token = '';
+                authBlock.classList.remove('hidden');
+            });
     } else {
         authBlock.classList.remove('hidden');
     }
