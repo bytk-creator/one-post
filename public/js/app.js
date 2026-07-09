@@ -400,25 +400,29 @@ async function loadMessages(before = null, prepend = false) {
             div.dataset.msgid = m.id;
             const t = new Date(m.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             
+            let inner = '';
             if (m.replyTo) {
                 const replyText = m.replyToText || 'Сообщение';
-                div.innerHTML = `<div class="message-reply" data-msgid="${m.replyTo}">↩ ${esc(replyText.substring(0, 50))}</div>${m.text ? esc(m.text) : ''}${m.imageUrl ? `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">` : ''}<div class="message-time">${t}</div>`;
-            } else {
-                div.innerHTML = (m.text ? esc(m.text) : '') + (m.imageUrl ? `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">` : '') + `<div class="message-time">${t}</div>`;
+                inner += `<div class="message-reply" data-msgid="${m.replyTo}">↩ ${esc(replyText.substring(0, 50))}</div>`;
             }
+            inner += (m.text ? esc(m.text) : '');
+            inner += (m.imageUrl ? `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">` : '');
+            inner += `<div class="message-time">${t}</div>`;
+            div.innerHTML = inner;
             
-            // Клик по цитате — прокрутка к оригинальному сообщению
+            // Клик по цитате — прокрутка
             div.querySelector('.message-reply')?.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const msgId = e.target.dataset.msgid;
-                const target = document.querySelector(`[data-msgid="${msgId}"]`);
+                const msgId = e.currentTarget.dataset.msgid;
+                const target = document.querySelector(`.message[data-msgid="${msgId}"]`);
                 if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
             });
             
             // Двойной клик — ответить (ПК)
-            div.addEventListener('dblclick', () => {
+            div.addEventListener('dblclick', (e) => {
+                e.preventDefault();
                 replyTo = m.id;
-                const previewText = m.text || 'Фото';
+                const previewText = m.text || '📷 Фото';
                 replyPreviewText.textContent = previewText.substring(0, 100);
                 replyPreview.classList.remove('hidden');
                 messageInput.focus();
@@ -426,10 +430,10 @@ async function loadMessages(before = null, prepend = false) {
             
             // Долгое нажатие — ответить (мобилки)
             let longPressTimer;
-            div.addEventListener('touchstart', () => {
+            div.addEventListener('touchstart', (e) => {
                 longPressTimer = setTimeout(() => {
                     replyTo = m.id;
-                    const previewText = m.text || 'Фото';
+                    const previewText = m.text || '📷 Фото';
                     replyPreviewText.textContent = previewText.substring(0, 100);
                     replyPreview.classList.remove('hidden');
                     messageInput.focus();
