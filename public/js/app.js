@@ -24,12 +24,12 @@ let typingTimer = null;
 let typingIndicatorEl = null;
 
 // ===== ГОЛОСОВЫЕ ПЕРЕМЕННЫЕ =====
-let isVoiceRecording = false;
-let voiceMediaRecorder = null;
-let voiceAudioChunks = [];
-let voiceHoldTimer = null;
-let voiceIsHolding = false;
-let voiceIsInit = false;
+let isRecording = false;
+let mediaRecorder = null;
+let audioChunks = [];
+let holdTimer = null;
+let isHolding = false;
+let voiceInitDone = false;
 
 const authBlock = document.getElementById('authBlock');
 const appBlock = document.getElementById('appBlock');
@@ -614,11 +614,12 @@ async function loadMessages(before = null, prepend = false) {
 chatMessages.addEventListener('scroll', () => { if (chatMessages.scrollTop < 100 && messagesHasMore && !messagesLoading) { const fm = chatMessages.querySelector('.message'); if (fm && fm.dataset.msgTime) loadMessages(fm.dataset.msgTime, true); } });
 
 // ===== ОТПРАВКА СООБЩЕНИЯ =====
-async function sendMsg() {
-    const t = messageInput.value.trim();
+window.sendMsg = async function() {
+    const input = document.getElementById('messageInput');
+    const t = input ? input.value.trim() : '';
     if ((!t && !chatPhoto) || !currentChatPartner) return;
     
-    console.log('✉️ Отправка сообщения...');
+    console.log('✉️ Отправка сообщения:', t);
     sendTypingWithRetry(false);
     
     try {
@@ -635,25 +636,25 @@ async function sendMsg() {
             if (replyTo) { body.replyTo = replyTo; body.replyToText = replyPreviewText.textContent; }
             await apiCall('/api/messages', 'POST', body);
         }
-        messageInput.value = '';
+        if (input) input.value = '';
         chatPhoto = null;
-        chatPhotoInput.value = '';
-        chatPhotoPreview.classList.add('hidden');
+        if (chatPhotoInput) chatPhotoInput.value = '';
+        if (chatPhotoPreview) chatPhotoPreview.classList.add('hidden');
         replyTo = null;
-        replyPreview.classList.add('hidden');
+        if (replyPreview) replyPreview.classList.add('hidden');
         lastMessagesHash = '';
         loadMessages();
         loadDialogs();
         updateSendButtonUI();
     } catch (err) { alert(err.message); }
-}
+};
 
 // ===== КНОПКА ОТПРАВКИ (TELEGRAM СТИЛЬ) =====
 function initVoiceButton() {
-    if (voiceIsInit) return;
-    voiceIsInit = true;
+    if (voiceInitDone) return;
+    voiceInitDone = true;
     
-    console.log('🎙 Инициализация голосовой кнопки...');
+    console.log('🎙 Инициализация кнопки...');
     
     const btn = document.getElementById('sendMessageBtn');
     if (!btn) {
@@ -661,11 +662,11 @@ function initVoiceButton() {
         return;
     }
     
-    // Полностью пересоздаём кнопку
+    // Полностью пересоздаём
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
     
-    // Обновляем ссылку
+    // Обновляем глобальную ссылку
     const sendBtn = newBtn;
     
     // ===== ФУНКЦИЯ ОБНОВЛЕНИЯ UI =====
@@ -679,7 +680,6 @@ function initVoiceButton() {
             sendBtn.title = 'Отправить сообщение';
             sendBtn.style.background = '';
             sendBtn.style.color = '';
-            sendBtn.style.transform = '';
             sendBtn.classList.remove('recording');
         } else {
             sendBtn.innerHTML = '🎙';
@@ -687,7 +687,6 @@ function initVoiceButton() {
             sendBtn.title = 'Удерживайте для записи голосового';
             sendBtn.style.background = '';
             sendBtn.style.color = '';
-            sendBtn.style.transform = '';
             sendBtn.classList.remove('recording');
         }
     }
@@ -700,13 +699,6 @@ function initVoiceButton() {
         input.addEventListener('blur', updateUI);
     }
     
-    // ===== ПЕРЕМЕННЫЕ ДЛЯ ЗАПИСИ =====
-    let isRecording = false;
-    let mediaRecorder = null;
-    let audioChunks = [];
-    let holdTimer = null;
-    let isHolding = false;
-    
     // ===== ОБРАБОТЧИК КЛИКА (отправка текста) =====
     sendBtn.addEventListener('click', function(e) {
         e.stopPropagation();
@@ -717,14 +709,14 @@ function initVoiceButton() {
             console.log('✉️ Отправка текста');
             if (typeof window.sendMsg === 'function') {
                 window.sendMsg();
-                setTimeout(updateUI, 200);
+                setTimeout(updateUI, 300);
             }
         } else {
             console.log('🎙 Пусто');
         }
     });
     
-    // ===== ФУНКЦИИ ЗАПИСИ =====
+    // ===== УДЕРЖАНИЕ (запись) =====
     function startRecording() {
         console.log('🎙 Старт записи...');
         
@@ -862,7 +854,6 @@ function initVoiceButton() {
         })
         .then(function() {
             console.log('✅ Голосовое отправлено!');
-            showNotification('Успех', 'Голосовое отправлено', 'system');
             if (window.loadMessages) {
                 window.lastMessagesHash = '';
                 window.loadMessages();
@@ -946,14 +937,12 @@ function initVoiceButton() {
     
     // ===== ИНИЦИАЛИЗАЦИЯ =====
     setTimeout(updateUI, 100);
-    
-    // Сохраняем функцию для обновления извне
     window.updateSendButtonUI = updateUI;
     
-    console.log('✅ Голосовая кнопка готова!');
+    console.log('✅ Кнопка готова!');
 }
 
-// Обновление UI кнопки (вызывается из других мест)
+// ===== ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ КНОПКИ ИЗВНЕ =====
 function updateSendButtonUI() {
     const btn = document.getElementById('sendMessageBtn');
     if (!btn) return;
@@ -965,10 +954,14 @@ function updateSendButtonUI() {
         btn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
         btn.className = 'send-btn send-btn-text';
         btn.title = 'Отправить сообщение';
+        btn.style.background = '';
+        btn.style.color = '';
     } else {
         btn.innerHTML = '🎙';
         btn.className = 'send-btn send-btn-voice';
         btn.title = 'Удерживайте для записи голосового';
+        btn.style.background = '';
+        btn.style.color = '';
     }
 }
 
@@ -1386,26 +1379,14 @@ window.addEventListener('popstate', () => {
     navigateFromURL(path);
 });
 
-// ===== ДОПОЛНИТЕЛЬНАЯ ИНИЦИАЛИЗАЦИЯ =====
+// ===== ИНИЦИАЛИЗАЦИЯ =====
 document.addEventListener('DOMContentLoaded', function() {
-    const sendBtn = document.getElementById('sendMessageBtn');
-    if (sendBtn) {
-        sendBtn.addEventListener('click', function() {
-            sendTypingWithRetry(false);
-        });
-    }
-    
-    const input = document.getElementById('messageInput');
-    if (input) {
-        console.log('✅ messageInput уже существует при загрузке');
-    }
-    
     setTimeout(initVoiceButton, 1000);
 });
 
 console.log('✅ WebSocket клиент готов');
 
-// Автозапуск если уже есть токен
+// Автозапуск
 (function() {
     const t = localStorage.getItem('token');
     if (t) {
