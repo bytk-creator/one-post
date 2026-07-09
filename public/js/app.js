@@ -13,6 +13,7 @@ let feedPage = 1;
 let feedHasMore = true;
 let feedLoading = false;
 let feedObserver = null;
+let replyTo = null;
 
 const authBlock = document.getElementById('authBlock');
 const appBlock = document.getElementById('appBlock');
@@ -60,6 +61,9 @@ const chatPhotoInput = document.getElementById('chatPhotoInput');
 const chatPhotoPreview = document.getElementById('chatPhotoPreview');
 const chatPhotoPreviewImg = document.getElementById('chatPhotoPreviewImg');
 const chatRemovePhoto = document.getElementById('chatRemovePhoto');
+const replyPreview = document.getElementById('replyPreview');
+const replyPreviewText = document.getElementById('replyPreviewText');
+const replyPreviewClose = document.getElementById('replyPreviewClose');
 const settingsUsername = document.getElementById('settingsUsername');
 const settingsBio = document.getElementById('settingsBio');
 const settingsPassword = document.getElementById('settingsPassword');
@@ -372,14 +376,111 @@ function openChat(uid, un, avUrl) {
 }
 chatBackBtn.addEventListener('click', () => { dialogsSidebar.classList.remove('chat-open'); messagesLayout.classList.remove('mobile-view'); currentChatPartner = null; lastMessagesHash = ''; chatPartnerText.textContent = 'Выберите диалог'; messageInput.disabled = true; sendMessageBtn.disabled = true; chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог или найдите пользователя</div>'; });
 messageInput.addEventListener('input', () => { sendMessageBtn.disabled = !(messageInput.value.trim() || chatPhoto); });
-async function loadMessages(before = null, prepend = false) { if (!currentChatPartner) return; if (messagesLoading) return; messagesLoading = true; let url = '/api/messages/' + currentChatPartner; if (before) url += '?before=' + encodeURIComponent(before); try { const data = await apiCall(url); const msgs = data.messages; messagesHasMore = data.hasMore; if (!prepend) { const hash = JSON.stringify(msgs); if (hash === lastMessagesHash) { messagesLoading = false; return; } lastMessagesHash = hash; chatMessages.innerHTML = msgs.length ? '' : '<div class="chat-empty">Напишите первым!</div>'; } const frag = document.createDocumentFragment(); msgs.forEach(m => { const div = document.createElement('div'); div.className = 'message ' + (String(m.from) === String(currentUser.id) ? 'message-sent' : 'message-received'); div.dataset.msgTime = m.time; const t = new Date(m.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); div.innerHTML = (m.text ? esc(m.text) : '') + (m.imageUrl ? `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">` : '') + `<div class="message-time">${t}</div>`; frag.appendChild(div); }); if (prepend) { const oh = chatMessages.scrollHeight; chatMessages.insertBefore(frag, chatMessages.firstChild); chatMessages.scrollTop = chatMessages.scrollHeight - oh; } else { chatMessages.appendChild(frag); chatMessages.scrollTop = chatMessages.scrollHeight; } updateUnreadBadge(); } catch (err) {} messagesLoading = false; }
+async function loadMessages(before = null, prepend = false) {
+    if (!currentChatPartner) return;
+    if (messagesLoading) return;
+    messagesLoading = true;
+    let url = '/api/messages/' + currentChatPartner;
+    if (before) url += '?before=' + encodeURIComponent(before);
+    try {
+        const data = await apiCall(url);
+        const msgs = data.messages;
+        messagesHasMore = data.hasMore;
+        if (!prepend) {
+            const hash = JSON.stringify(msgs);
+            if (hash === lastMessagesHash) { messagesLoading = false; return; }
+            lastMessagesHash = hash;
+            chatMessages.innerHTML = msgs.length ? '' : '<div class="chat-empty">Напишите первым!</div>';
+        }
+        const frag = document.createDocumentFragment();
+        msgs.forEach(m => {
+            const div = document.createElement('div');
+            div.className = 'message ' + (String(m.from) === String(currentUser.id) ? 'message-sent' : 'message-received');
+            div.dataset.msgTime = m.time;
+            div.dataset.msgid = m.id;
+            const t = new Date(m.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            
+            if (m.replyTo) {
+                const replyText = m.replyToText || 'Сообщение';
+                div.innerHTML = `<div class="message-reply" data-msgid="${m.replyTo}">↩ ${esc(replyText.substring(0, 50))}</div>${m.text ? esc(m.text) : ''}${m.imageUrl ? `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">` : ''}<div class="message-time">${t}</div>`;
+            } else {
+                div.innerHTML = (m.text ? esc(m.text) : '') + (m.imageUrl ? `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">` : '') + `<div class="message-time">${t}</div>`;
+            }
+            
+            // Клик по цитате — прокрутка к оригинальному сообщению
+            div.querySelector('.message-reply')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const msgId = e.target.dataset.msgid;
+                const target = document.querySelector(`[data-msgid="${msgId}"]`);
+                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+            
+            // Двойной клик — ответить (ПК)
+            div.addEventListener('dblclick', () => {
+                replyTo = m.id;
+                const previewText = m.text || 'Фото';
+                replyPreviewText.textContent = previewText.substring(0, 100);
+                replyPreview.classList.remove('hidden');
+                messageInput.focus();
+            });
+            
+            // Долгое нажатие — ответить (мобилки)
+            let longPressTimer;
+            div.addEventListener('touchstart', () => {
+                longPressTimer = setTimeout(() => {
+                    replyTo = m.id;
+                    const previewText = m.text || 'Фото';
+                    replyPreviewText.textContent = previewText.substring(0, 100);
+                    replyPreview.classList.remove('hidden');
+                    messageInput.focus();
+                }, 500);
+            });
+            div.addEventListener('touchend', () => clearTimeout(longPressTimer));
+            div.addEventListener('touchmove', () => clearTimeout(longPressTimer));
+            
+            frag.appendChild(div);
+        });
+        if (prepend) { const oh = chatMessages.scrollHeight; chatMessages.insertBefore(frag, chatMessages.firstChild); chatMessages.scrollTop = chatMessages.scrollHeight - oh; }
+        else { chatMessages.appendChild(frag); chatMessages.scrollTop = chatMessages.scrollHeight; }
+        updateUnreadBadge();
+    } catch (err) {}
+    messagesLoading = false;
+}
 chatMessages.addEventListener('scroll', () => { if (chatMessages.scrollTop < 100 && messagesHasMore && !messagesLoading) { const fm = chatMessages.querySelector('.message'); if (fm && fm.dataset.msgTime) loadMessages(fm.dataset.msgTime, true); } });
-async function sendMsg() { const t = messageInput.value.trim(); if ((!t && !chatPhoto) || !currentChatPartner) return; try { if (chatPhoto) { const fd = new FormData(); fd.append('to', currentChatPartner); fd.append('text', t || ''); fd.append('image', chatPhoto); const r = await fetch('/api/messages/photo', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd }); if (!r.ok) throw new Error((await r.json()).error); } else { await apiCall('/api/messages', 'POST', { to: currentChatPartner, text: t }); } messageInput.value = ''; chatPhoto = null; chatPhotoInput.value = ''; chatPhotoPreview.classList.add('hidden'); lastMessagesHash = ''; loadMessages(); loadDialogs(); } catch (err) { alert(err.message); } }
+async function sendMsg() {
+    const t = messageInput.value.trim();
+    if ((!t && !chatPhoto) || !currentChatPartner) return;
+    try {
+        if (chatPhoto) {
+            const fd = new FormData();
+            fd.append('to', currentChatPartner);
+            fd.append('text', t || '');
+            fd.append('image', chatPhoto);
+            if (replyTo) { fd.append('replyTo', replyTo); fd.append('replyToText', replyPreviewText.textContent); }
+            const r = await fetch('/api/messages/photo', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
+            if (!r.ok) throw new Error((await r.json()).error);
+        } else {
+            const body = { to: currentChatPartner, text: t };
+            if (replyTo) { body.replyTo = replyTo; body.replyToText = replyPreviewText.textContent; }
+            await apiCall('/api/messages', 'POST', body);
+        }
+        messageInput.value = '';
+        chatPhoto = null;
+        chatPhotoInput.value = '';
+        chatPhotoPreview.classList.add('hidden');
+        replyTo = null;
+        replyPreview.classList.add('hidden');
+        lastMessagesHash = '';
+        loadMessages();
+        loadDialogs();
+    } catch (err) { alert(err.message); }
+}
 sendMessageBtn.addEventListener('click', sendMsg);
 messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMsg(); });
 chatAttachBtn.addEventListener('click', () => { chatPhotoInput.click(); });
 chatPhotoInput.addEventListener('change', () => { const f = chatPhotoInput.files[0]; if (!f) return; chatPhoto = f; const r = new FileReader(); r.onload = (e) => { chatPhotoPreviewImg.src = e.target.result; chatPhotoPreview.classList.remove('hidden'); sendMessageBtn.disabled = false; }; r.readAsDataURL(f); });
 chatRemovePhoto.addEventListener('click', () => { chatPhoto = null; chatPhotoInput.value = ''; chatPhotoPreview.classList.add('hidden'); sendMessageBtn.disabled = !messageInput.value.trim(); });
+replyPreviewClose.addEventListener('click', () => { replyTo = null; replyPreview.classList.add('hidden'); });
 setInterval(() => { if (currentChatPartner && !messagesPage.classList.contains('hidden') && chatMessages.scrollTop > chatMessages.scrollHeight - chatMessages.clientHeight - 200) loadMessages(); }, 3000);
 setInterval(() => { if (!messagesPage.classList.contains('hidden')) loadDialogs(); }, 5000);
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
