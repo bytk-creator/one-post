@@ -19,6 +19,16 @@ const appBlock = document.getElementById('appBlock');
 const loginForm = document.getElementById('loginForm');
 const registerForm = document.getElementById('registerForm');
 const tabBtns = document.querySelectorAll('.tab-btn');
+
+let captchaAnswer = 0;
+function generateCaptcha() {
+    const a = Math.floor(Math.random() * 10) + 1;
+    const b = Math.floor(Math.random() * 10) + 1;
+    captchaAnswer = a + b;
+    document.getElementById('captchaQuestion').textContent = `Сколько будет ${a} + ${b}?`;
+}
+generateCaptcha();
+
 const msgBadge = document.getElementById('msgBadge');
 const feedPageEl = document.getElementById('feedPage');
 const profilePage = document.getElementById('profilePage');
