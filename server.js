@@ -155,9 +155,9 @@ function parseLastMsg(text) {
 function parseMsgText(text) {
     try {
         const parsed = JSON.parse(text);
-        if (parsed && typeof parsed === 'object') return { text: parsed.text || '', imageUrl: parsed.imageUrl || null };
-        return { text, imageUrl: null };
-    } catch (e) { return { text, imageUrl: null }; }
+        if (parsed && typeof parsed === 'object') return { text: parsed.text || '', imageUrl: parsed.imageUrl || null, replyTo: parsed.replyTo || null, replyToText: parsed.replyToText || null };
+        return { text, imageUrl: null, replyTo: null, replyToText: null };
+    } catch (e) { return { text, imageUrl: null, replyTo: null, replyToText: null }; }
 }
 
 function isOnline(lastSeen) {
@@ -380,7 +380,7 @@ const server = http.createServer(async (req, res) => {
         
         const fixed = messages.map(m => {
             const parsed = parseMsgText(m.text);
-            return { id: String(m.id), from: String(m.fromUserId), to: String(m.toUserId), fromUserId: String(m.fromUserId), toUserId: String(m.toUserId), text: parsed.text, imageUrl: parsed.imageUrl, time: m.time, read: m.read, fromUsername: m.fromUsername, toUsername: m.toUsername };
+            return { id: String(m.id), from: String(m.fromUserId), to: String(m.toUserId), fromUserId: String(m.fromUserId), toUserId: String(m.toUserId), text: parsed.text, imageUrl: parsed.imageUrl, replyTo: parsed.replyTo, replyToText: parsed.replyToText, time: m.time, read: m.read, fromUsername: m.fromUsername, toUsername: m.toUsername };
         });
         return serveJSON(res, { messages: fixed, hasMore });
     }
@@ -390,6 +390,8 @@ const server = http.createServer(async (req, res) => {
         const { fields, files } = await parseFormData(req);
         const to = fields.to;
         const text = fields.text || '';
+        const replyTo = fields.replyTo || null;
+        const replyToText = fields.replyToText || null;
         if (!to) return serveJSON(res, { error: 'Получатель обязателен' }, 400);
         if (String(to) === String(currentUser.id)) return serveJSON(res, { error: 'Нельзя себе' }, 400);
         let imageUrl = null;
@@ -401,19 +403,20 @@ const server = http.createServer(async (req, res) => {
             imageUrl = '/uploads/' + fileName;
         }
         const msgId = Date.now().toString();
-        const storedText = imageUrl ? JSON.stringify({ text: (text || '').trim(), imageUrl }) : (text || '').trim();
+        const storedText = JSON.stringify({ text: (text || '').trim(), imageUrl, replyTo, replyToText });
         runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, String(to), storedText, new Date().toISOString()]);
-        return serveJSON(res, { success: true, message: { id: msgId, from: String(currentUser.id), to: String(to), text: text.trim(), imageUrl, fromUsername: currentUser.username } });
+        return serveJSON(res, { success: true, message: { id: msgId, from: String(currentUser.id), to: String(to), text: text.trim(), imageUrl, replyTo, replyToText, fromUsername: currentUser.username } });
     }
 
     if (url === '/api/messages' && method === 'POST') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
-        const { to, text } = await readBody(req);
+        const { to, text, replyTo, replyToText } = await readBody(req);
         if (!to || !text || !text.trim()) return serveJSON(res, { error: 'Получатель и текст обязательны' }, 400);
         if (String(to) === String(currentUser.id)) return serveJSON(res, { error: 'Нельзя себе' }, 400);
         const msgId = Date.now().toString();
-        runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, String(to), text.trim(), new Date().toISOString()]);
-        return serveJSON(res, { success: true, message: { id: msgId, from: String(currentUser.id), to: String(to), text: text.trim(), fromUsername: currentUser.username } });
+        const storedText = JSON.stringify({ text: text.trim(), imageUrl: null, replyTo: replyTo || null, replyToText: replyToText || null });
+        runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, String(to), storedText, new Date().toISOString()]);
+        return serveJSON(res, { success: true, message: { id: msgId, from: String(currentUser.id), to: String(to), text: text.trim(), replyTo, replyToText, fromUsername: currentUser.username } });
     }
 
     if (url.startsWith('/api/users/search') && method === 'GET') {
