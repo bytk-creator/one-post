@@ -383,7 +383,12 @@ function navigateFromURL(page) {
     const t = localStorage.getItem('token');
     if (t) {
         token = t;
-        apiCall('/api/me', 'GET').then(d => enterApp(d.user)).catch(() => {
+        apiCall('/api/me', 'GET').then(d => {
+            enterApp(d.user);
+            // После загрузки приложения — перейти на нужную страницу
+            const path = location.pathname.replace('/', '') || 'feed';
+            setTimeout(() => navigateFromURL(path), 100);
+        }).catch(() => {
             localStorage.removeItem('token'); token = '';
             authBlock.classList.remove('hidden');
         });
