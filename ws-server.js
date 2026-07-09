@@ -240,7 +240,6 @@ function createWebSocketServer(server) {
                     return;
                 }
                 
-                // ===== FIX: ОБРАБОТКА TYPING С ОТПРАВКОЙ ВСЕМ =====
                 if (data.type === 'typing' && userId) {
                     console.log('⌨️ Typing от', userId, 'to:', data.payload?.to);
                     const { to, isTyping } = data.payload || {};
@@ -259,7 +258,6 @@ function createWebSocketServer(server) {
                     console.log(`📊 ID клиентов: ${Array.from(clients.keys()).join(', ')}`);
                     
                     let sent = 0;
-                    // Отправляем ВСЕМ клиентам, кроме отправителя
                     for (const [id, client] of clients) {
                         if (client.readyState === WebSocket.OPEN && String(id) !== String(userId)) {
                             try {
@@ -274,7 +272,6 @@ function createWebSocketServer(server) {
                     
                     console.log(`📊 Отправлено ${sent} клиентам из ${clients.size - 1}`);
                     
-                    // Если никому не отправили — пробуем отправить конкретному получателю
                     if (sent === 0) {
                         const targetWs = clients.get(String(to));
                         if (targetWs && targetWs.readyState === WebSocket.OPEN) {
