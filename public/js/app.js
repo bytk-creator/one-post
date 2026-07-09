@@ -218,7 +218,6 @@ async function startApp() {
         setInterval(() => { if (token) apiCall('/api/ping', 'POST').catch(() => {}); }, 30000);
         apiCall('/api/ping', 'POST').catch(() => {});
         
-        // Подключаем WebSocket
         setTimeout(() => connectWebSocket(), 1000);
     } catch (err) { logout(); }
 }
@@ -468,14 +467,15 @@ function openChat(uid, un, avUrl) {
                 const hasText = this.value.trim().length > 0;
                 console.log('✏️ Ввод:', hasText ? 'есть текст' : 'пусто');
                 
+                clearTimeout(typingTimer);
+                
                 if (hasText) {
-                    sendTypingStatus(true);
-                    clearTimeout(typingTimer);
+                    sendTypingWithRetry(true);
                     typingTimer = setTimeout(() => {
-                        sendTypingStatus(false);
-                    }, 2000);
+                        sendTypingWithRetry(false);
+                    }, 3000);
                 } else {
-                    sendTypingStatus(false);
+                    sendTypingWithRetry(false);
                 }
             });
         }
@@ -585,8 +585,7 @@ async function sendMsg() {
     const t = messageInput.value.trim();
     if ((!t && !chatPhoto) || !currentChatPartner) return;
     
-    // Скрываем индикатор печатания
-    sendTypingStatus(false);
+    sendTypingWithRetry(false);
     
     try {
         if (chatPhoto) {
@@ -719,9 +718,10 @@ function connectWebSocket() {
         ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
+                console.log('📨 ПОЛУЧЕНО WS СООБЩЕНИЕ:', data.type, data);
                 handleWebSocketMessage(data);
             } catch (err) {
-                console.error('❌ Ошибка парсинга WS:', err);
+                console.error('❌ Ошибка парсинга WS:', err, event.data);
             }
         };
         
@@ -752,7 +752,7 @@ function connectWebSocket() {
 }
 
 function handleWebSocketMessage(data) {
-    console.log('📨 Получено WS сообщение:', data.type, data);
+    console.log('📨 ОБРАБОТКА WS СООБЩЕНИЯ:', data.type, data);
     
     if (data.type === 'error') {
         console.error('❌ WS ошибка:', data.payload);
@@ -782,13 +782,14 @@ function handleWebSocketMessage(data) {
             
         case 'online_status': {
             const { userId, online } = data.payload;
+            console.log('🟢 Онлайн статус:', userId, online);
             updateOnlineStatusUI(userId, online);
             break;
         }
             
         case 'typing': {
             const { from, isTyping } = data.payload;
-            console.log('🔵 Получен typing от', from, 'isTyping:', isTyping);
+            console.log('🔵🔵🔵 ПОЛУЧЕН TYPING ОТ', from, 'isTyping:', isTyping);
             showTypingIndicator(from, isTyping);
             break;
         }
@@ -798,6 +799,7 @@ function handleWebSocketMessage(data) {
             break;
             
         case 'pong':
+            console.log('🏓 Pong получен');
             break;
             
         default:
@@ -825,7 +827,11 @@ function addMessageToChat(msg) {
     
     let checkmark = '';
     if (String(msg.from) === String(currentUser.id)) {
-        checkmark = '<span style="color:#4F6EF7;font-size:11px;margin-left:4px;" title="Прочитано">✓✓</span>';
+        if (msg.read) {
+            checkmark = '<span style="color:#4F6EF7;font-size:11px;margin-left:4px;" title="Прочитано">✓✓</span>';
+        } else {
+            checkmark = '<span style="color:#9CA3AF;font-size:11px;margin-left:4px;" title="Доставлено">✓</span>';
+        }
     }
     inner += `<div class="message-time">${t}${checkmark}</div>`;
     
@@ -842,12 +848,8 @@ function addMessageToChat(msg) {
 }
 
 function showTypingIndicator(from, isTyping) {
-    console.log('🟣 showTypingIndicator вызван:', from, isTyping, 'currentChatPartner:', currentChatPartner);
-    
-    if (!currentChatPartner || String(currentChatPartner) !== String(from)) {
-        console.log('🟣 Не тот чат или нет партнера');
-        return;
-    }
+    console.log('🟣 showTypingIndicator ВЫЗВАН:', from, isTyping);
+    console.log('🟣 currentChatPartner:', currentChatPartner);
     
     const chatMessagesEl = document.getElementById('chatMessages');
     if (!chatMessagesEl) {
@@ -855,19 +857,24 @@ function showTypingIndicator(from, isTyping) {
         return;
     }
     
+    console.log('🟣 chatMessages найден, isTyping:', isTyping);
+    
     if (isTyping) {
         if (!typingIndicatorEl) {
-            console.log('🟣 Создаём индикатор');
+            console.log('🟣 СОЗДАЁМ ИНДИКАТОР');
             typingIndicatorEl = document.createElement('div');
             typingIndicatorEl.id = 'typingIndicator';
             typingIndicatorEl.className = 'typing-indicator';
             typingIndicatorEl.innerHTML = 'печатает<span class="typing-dots"><span></span><span></span><span></span></span>';
             chatMessagesEl.appendChild(typingIndicatorEl);
             chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+            console.log('🟣 ИНДИКАТОР ДОБАВЛЕН В DOM');
+        } else {
+            console.log('🟣 Индикатор уже существует');
         }
     } else {
         if (typingIndicatorEl) {
-            console.log('🟣 Удаляем индикатор');
+            console.log('🟣 УДАЛЯЕМ ИНДИКАТОР');
             typingIndicatorEl.remove();
             typingIndicatorEl = null;
         }
@@ -898,29 +905,35 @@ function updateOnlineStatusUI(userId, online) {
     }
 }
 
-function sendTypingStatus(isTyping) {
-    console.log('🟡 sendTypingStatus вызван:', isTyping, 'WS connected:', wsConnected, 'Chat partner:', currentChatPartner);
-    
+// ===== ОТПРАВКА TYPING С ПОВТОРОМ =====
+function sendTypingWithRetry(isTyping, retries = 0) {
     if (!wsConnected || !currentChatPartner) {
         console.log('❌ Не отправляем: WS не подключен или нет партнера');
         return;
     }
     
-    clearTimeout(typingTimer);
-    typingTimer = setTimeout(() => {
-        try {
-            console.log('📤 Отправка typing:', isTyping, 'to:', currentChatPartner);
-            ws.send(JSON.stringify({
-                type: 'typing',
-                payload: {
-                    to: currentChatPartner,
-                    isTyping: isTyping
-                }
-            }));
-        } catch (err) {
-            console.error('❌ Ошибка отправки typing:', err);
+    try {
+        ws.send(JSON.stringify({
+            type: 'typing',
+            payload: {
+                to: currentChatPartner,
+                isTyping: isTyping
+            }
+        }));
+        console.log('📤 Typing отправлен (попытка ' + (retries + 1) + '):', isTyping);
+    } catch (err) {
+        console.error('❌ Ошибка отправки:', err);
+        if (retries < 3) {
+            setTimeout(() => {
+                sendTypingWithRetry(isTyping, retries + 1);
+            }, 200);
         }
-    }, 300);
+    }
+}
+
+function sendTypingStatus(isTyping) {
+    console.log('🟡 sendTypingStatus вызван:', isTyping);
+    sendTypingWithRetry(isTyping);
 }
 
 // Дополнительная инициализация
@@ -928,11 +941,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const sendBtn = document.getElementById('sendMessageBtn');
     if (sendBtn) {
         sendBtn.addEventListener('click', function() {
-            sendTypingStatus(false);
+            sendTypingWithRetry(false);
         });
     }
     
-    // Проверяем, есть ли уже messageInput
     const input = document.getElementById('messageInput');
     if (input) {
         console.log('✅ messageInput уже существует при загрузке');
