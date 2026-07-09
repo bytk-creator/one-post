@@ -14,6 +14,7 @@ let feedHasMore = true;
 let feedLoading = false;
 let feedObserver = null;
 let replyTo = null;
+let lastUnreadCount = 0;
 
 const authBlock = document.getElementById('authBlock');
 const appBlock = document.getElementById('appBlock');
@@ -350,7 +351,19 @@ saveProfile.addEventListener('click', async () => {
 savePassword.addEventListener('click', async () => { const p = settingsPassword.value.trim(); if (!p) return alert('Введите пароль'); if (p.length < 4) return alert('От 4 символов'); try { await apiCall('/api/settings', 'POST', { password: p }); settingsPassword.value = ''; showOk('Пароль изменён!'); } catch (err) { alert(err.message); } });
 function showOk(m) { settingsSuccess.textContent = '✅ ' + m; settingsSuccess.classList.remove('hidden'); setTimeout(() => settingsSuccess.classList.add('hidden'), 3000); }
 
-async function updateUnreadBadge() { try { const d = await apiCall('/api/unread', 'GET'); msgBadge.classList.toggle('hidden', !d.count); if (d.count) msgBadge.textContent = d.count; } catch (err) {} }
+async function updateUnreadBadge() {
+    try {
+        const d = await apiCall('/api/unread', 'GET');
+        msgBadge.classList.toggle('hidden', !d.count);
+        if (d.count) msgBadge.textContent = d.count;
+        
+        if (d.count > lastUnreadCount && !messagesPage.classList.contains('hidden')) {
+            showNotification('Новые сообщения', `У вас ${d.count} непрочитанных сообщений`, 'message');
+        }
+        lastUnreadCount = d.count;
+    } catch (err) {}
+}
+
 async function loadDialogs() { try { const dialogs = await apiCall('/api/dialogs', 'GET'); dialogsList.innerHTML = ''; if (!dialogs.length) { dialogsList.innerHTML = '<div class="no-dialogs">Нет диалогов</div>'; } dialogs.forEach(d => { const div = document.createElement('div'); div.className = 'dialog-item'; if (String(currentChatPartner) === String(d.userId)) div.classList.add('active'); const t = d.lastTime ? new Date(d.lastTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''; div.innerHTML = `<div class="dialog-avatar">${d.avatarUrl ? `<img src="${d.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" loading="lazy">` : d.username.charAt(0).toUpperCase()}</div><div class="dialog-info"><div class="dialog-name">${esc(d.username)}${onlineDot(d.online)}</div><div class="dialog-last">${esc((d.lastMessage || '').substring(0, 30))}</div></div><div class="dialog-meta"><div class="dialog-time">${t}</div>${d.unread > 0 ? `<div class="unread-badge">${d.unread}</div>` : ''}</div>`; div.addEventListener('click', () => openChat(d.userId, d.username, d.avatarUrl)); dialogsList.appendChild(div); }); } catch (err) {} }
 let st; searchUserInput.addEventListener('input', () => { clearTimeout(st); const q = searchUserInput.value.trim(); if (!q) { searchResults.classList.add('hidden'); return; } st = setTimeout(async () => { try { const users = await apiCall('/api/users/search?q=' + encodeURIComponent(q), 'GET'); searchResults.classList.remove('hidden'); searchResults.innerHTML = ''; if (!users.length) searchResults.innerHTML = '<div class="search-result-item" style="color:var(--text-secondary);">Никого нет</div>'; users.forEach(u => { const div = document.createElement('div'); div.className = 'search-result-item'; div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '10px'; div.style.padding = '12px 14px'; const av = u.avatarUrl ? `<img src="${u.avatarUrl}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:36px;height:36px;border-radius:50%;background:var(--avatar-gradient,linear-gradient(135deg,#4F6EF7,#7B8CFF));color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;">${u.username.charAt(0).toUpperCase()}</div>`; div.innerHTML = av + '<span style="font-size:14px;font-weight:600;">' + esc(u.username) + '</span>'; div.addEventListener('click', () => { openChat(u.id, u.username, u.avatarUrl); searchUserInput.value = ''; searchResults.classList.add('hidden'); }); searchResults.appendChild(div); }); } catch (err) {} }, 300); });
 function openChat(uid, un, avUrl) {
@@ -444,17 +457,6 @@ async function loadMessages(before = null, prepend = false) {
         if (prepend) { const oh = chatMessages.scrollHeight; chatMessages.insertBefore(frag, chatMessages.firstChild); chatMessages.scrollTop = chatMessages.scrollHeight - oh; }
         else { chatMessages.appendChild(frag); chatMessages.scrollTop = chatMessages.scrollHeight; }
         updateUnreadBadge();
-        
-                if (msgs.length && !prepend) {
-            const lastMsg = msgs[msgs.length-1];
-            const isIncoming = String(lastMsg.from) !== String(currentUser?.id);
-            const isRecent = (new Date() - new Date(lastMsg.time)) < 10000;
-            const isOtherChat = String(lastMsg.from) !== String(currentChatPartner);
-            
-            if (isIncoming && isRecent && isOtherChat) {
-                showNotification(lastMsg.fromUsername || 'Новое сообщение', lastMsg.text?.substring(0, 60) || '📷 Фото', 'message');
-            }
-        }
     } catch (err) {}
     messagesLoading = false;
 }
