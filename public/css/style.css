@@ -237,7 +237,7 @@ input:checked + .theme-slider:before { transform: translateX(26px); }
 }
 .chat-empty .empty-icon { margin-bottom: 12px; }
 .chat-empty .empty-icon svg { opacity: 0.4; }
-.message { max-width: 72%; padding: 10px 16px; border-radius: 18px; font-size: 15px; line-height: 1.5; word-wrap: break-word; animation: fadeInUp 0.2s ease; }
+.message { max-width: 72%; padding: 10px 16px; border-radius: 18px; font-size: 15px; line-height: 1.5; word-wrap: break-word; animation: fadeInUp 0.2s ease; user-select: none; -webkit-user-select: none; }
 .message-sent { align-self: flex-end; background: var(--message-sent-bg); border-bottom-right-radius: 6px; }
 .message-received { align-self: flex-start; background: var(--message-received-bg); border: 1px solid var(--border); border-bottom-left-radius: 6px; }
 .message-time { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; text-align: right; }
