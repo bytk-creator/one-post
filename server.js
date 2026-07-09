@@ -188,7 +188,8 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/register' && method === 'POST') {
         const { username, password } = await readBody(req);
         if (!username || !password) return serveJSON(res, { error: 'Логин и пароль обязательны' }, 400);
-        if (username.length < 3) return serveJSON(res, { error: 'Логин минимум 3 символа' }, 400);
+        if (username.length < 3) return serveJSON(res, { error: 'OneID минимум 3 символа' }, 400);
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) return serveJSON(res, { error: 'OneID: только английские буквы, цифры и _' }, 400);
         if (password.length < 4) return serveJSON(res, { error: 'Пароль минимум 4 символа' }, 400);
         if (queryOne('SELECT id FROM users WHERE username = ?', [username])) return serveJSON(res, { error: 'Пользователь уже существует' }, 400);
         const userId = Date.now().toString();
