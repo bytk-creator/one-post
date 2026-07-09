@@ -1,68 +1,52 @@
 const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
-const initSqlJs = require('sql.js');
 
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'database.db');
 
 let db;
+let saveDbCallback = null;
 
 function getDb() { return db; }
 
-async function initDb() {
-    try {
-        const SQL = await initSqlJs();
-        if (fs.existsSync(DB_PATH)) {
-            const buffer = fs.readFileSync(DB_PATH);
-            db = new SQL.Database(buffer);
-        } else {
-            db = new SQL.Database();
+function setDb(externalDb) {
+    db = externalDb;
+    console.log('✅ WebSocket: БД подключена');
+}
+
+function setSaveDb(callback) {
+    saveDbCallback = callback;
+    console.log('✅ WebSocket: функция сохранения БД подключена');
+}
+
+function saveDb() {
+    if (saveDbCallback) {
+        saveDbCallback();
+    } else if (db) {
+        try {
+            const data = db.export();
+            fs.writeFileSync(DB_PATH, Buffer.from(data));
+        } catch (err) {
+            console.error('❌ Ошибка сохранения БД:', err);
         }
-        db.run(`CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL,
-            bio TEXT DEFAULT '', avatarUrl TEXT, coverUrl TEXT DEFAULT '', createdAt TEXT NOT NULL,
-            lastSeen TEXT DEFAULT '')`);
-        db.run(`CREATE TABLE IF NOT EXISTS sessions (
-            token TEXT PRIMARY KEY, userId TEXT NOT NULL, createdAt TEXT NOT NULL)`);
-        db.run(`CREATE TABLE IF NOT EXISTS messages (
-            id TEXT PRIMARY KEY, fromUserId TEXT NOT NULL, toUserId TEXT NOT NULL,
-            text TEXT NOT NULL, time TEXT NOT NULL, read INTEGER DEFAULT 0)`);
-        console.log('✅ WebSocket: БД инициализирована');
-        return true;
-    } catch (err) {
-        console.error('❌ WebSocket: Ошибка инициализации БД:', err);
-        return false;
     }
 }
 
 function getAuth(token) {
-    if (!db) {
-        console.log('⚠️ БД не инициализирована');
-        return null;
-    }
+    if (!db) return null;
     try {
         const stmt = db.prepare('SELECT * FROM sessions WHERE token = ?');
         stmt.bind([token]);
-        if (!stmt.step()) {
-            stmt.free();
-            console.log('❌ Токен не найден в сессиях');
-            return null;
-        }
+        if (!stmt.step()) { stmt.free(); return null; }
         const session = stmt.getAsObject();
         stmt.free();
         
         const stmt2 = db.prepare('SELECT * FROM users WHERE id = ?');
         stmt2.bind([session.userId]);
-        if (!stmt2.step()) {
-            stmt2.free();
-            console.log('❌ Пользователь не найден');
-            return null;
-        }
+        if (!stmt2.step()) { stmt2.free(); return null; }
         const user = stmt2.getAsObject();
         stmt2.free();
-        
-        console.log('✅ Пользователь найден:', user.username);
         return user;
     } catch (err) {
         console.error('❌ Auth error:', err);
@@ -70,12 +54,10 @@ function getAuth(token) {
     }
 }
 
-function setDb(externalDb) {
-    db = externalDb;
-    console.log('✅ WebSocket: Используем внешнюю БД');
-}
-
 const clients = new Map();
+const messageRateLimits = new Map();
+const RATE_WINDOW = 2000;
+const MAX_MESSAGES = 5;
 
 function broadcastOnlineStatus(userId, online) {
     const payload = JSON.stringify({
@@ -83,8 +65,8 @@ function broadcastOnlineStatus(userId, online) {
         payload: { userId: String(userId), online }
     });
     
-    for (const [_, client] of clients) {
-        if (client.readyState === WebSocket.OPEN) {
+    for (const [id, client] of clients) {
+        if (client.readyState === WebSocket.OPEN && id !== String(userId)) {
             try {
                 client.send(payload);
             } catch (err) {
@@ -100,65 +82,78 @@ function createWebSocketServer(server) {
         path: '/ws'
     });
     
+    // Heartbeat
+    const heartbeatInterval = setInterval(() => {
+        wss.clients.forEach((ws) => {
+            if (ws.isAlive === false) {
+                console.log('💀 Удаление мёртвого соединения');
+                return ws.terminate();
+            }
+            ws.isAlive = false;
+            ws.ping(() => {});
+        });
+    }, 30000);
+    
+    wss.on('close', () => {
+        clearInterval(heartbeatInterval);
+    });
+    
     wss.on('connection', (ws, req) => {
         console.log('🔌 Новое WebSocket подключение');
-        console.log(`📊 Текущее количество клиентов: ${clients.size}`);
         
+        ws.isAlive = true;
         let userId = null;
-        const url = new URL(req.url, `http://${req.headers.host}`);
-        const token = url.searchParams.get('token');
+        let authenticated = false;
         
-        console.log('📝 Получен токен:', token ? token.substring(0, 20) + '...' : 'НЕТ ТОКЕНА');
-        
-        if (!token) {
-            console.log('❌ Нет токена');
-            ws.send(JSON.stringify({ 
-                type: 'error', 
-                payload: 'Токен не передан' 
-            }));
-            ws.close(4001);
-            return;
-        }
+        ws.on('pong', () => {
+            ws.isAlive = true;
+        });
         
         ws.on('message', async (message) => {
             try {
                 const data = JSON.parse(message);
-                console.log('📨 Получено WS сообщение:', data.type);
                 
+                // Авторизация
                 if (data.type === 'auth') {
-                    console.log('🔐 Авторизация...');
-                    const { userId: uid, token: t } = data.payload || {};
+                    const { token } = data.payload || {};
                     
-                    if (!t) {
-                        console.log('❌ Нет токена');
+                    if (!token || !db) {
                         ws.send(JSON.stringify({ 
                             type: 'error', 
-                            payload: 'Токен не передан' 
+                            payload: 'Токен не передан или БД не готова' 
                         }));
                         return;
                     }
                     
-                    if (!db) {
-                        console.log('⏳ Инициализация БД...');
-                        await initDb();
-                    }
-                    
-                    const user = getAuth(t);
-                    
+                    const user = getAuth(token);
                     if (!user) {
-                        console.log('❌ Неверный токен');
                         ws.send(JSON.stringify({ 
                             type: 'error', 
                             payload: 'Неверный токен' 
                         }));
+                        ws.close(4001);
                         return;
                     }
                     
+                    // Отключаем старое соединение если есть
+                    const existing = clients.get(String(user.id));
+                    if (existing && existing !== ws) {
+                        console.log('⚠️ Закрываем старое соединение пользователя');
+                        existing.close(4000, 'Новое подключение');
+                    }
+                    
                     userId = String(user.id);
+                    authenticated = true;
                     clients.set(userId, ws);
-                    console.log(`✅ Пользователь ${userId} (${user.username}) подключён`);
-                    console.log(`📊 Клиент добавлен. Всего клиентов: ${clients.size}`);
-                    console.log(`📊 Список клиентов: ${Array.from(clients.keys()).join(', ')}`);
+                    
+                    console.log(`✅ ${user.username} подключён (всего: ${clients.size})`);
+                    
+                    // Обновляем lastSeen
+                    try {
+                        db.run('UPDATE users SET lastSeen = ? WHERE id = ?', 
+                            [new Date().toISOString(), userId]);
+                        saveDb();
+                    } catch (err) {}
                     
                     ws.send(JSON.stringify({ 
                         type: 'auth_success', 
@@ -169,139 +164,127 @@ function createWebSocketServer(server) {
                     return;
                 }
                 
-                if (data.type === 'message' && userId) {
-                    console.log('📨 Сообщение от', userId);
-                    const { to, text, replyTo, replyToText } = data.payload || {};
-                    
-                    if (!to) {
-                        ws.send(JSON.stringify({ 
-                            type: 'error', 
-                            payload: 'Нет получателя' 
-                        }));
-                        return;
-                    }
-                    
-                    if (String(to) === String(userId)) {
-                        ws.send(JSON.stringify({ 
-                            type: 'error', 
-                            payload: 'Нельзя себе' 
-                        }));
-                        return;
-                    }
-                    
-                    if (!db) await initDb();
-                    
-                    const msgId = Date.now().toString();
-                    const sanitizedText = (text || '').replace(/<[^>]*>/g, '').substring(0, 2000);
-                    const storedText = JSON.stringify({ 
-                        text: sanitizedText, 
-                        imageUrl: null, 
-                        replyTo: replyTo || null, 
-                        replyToText: replyToText || null 
-                    });
-                    
-                    try {
-                        db.run('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', 
-                            [msgId, userId, String(to), storedText, new Date().toISOString()]);
-                        const data = db.export();
-                        fs.writeFileSync(DB_PATH, Buffer.from(data));
-                        console.log('✅ Сообщение сохранено в БД');
-                    } catch (err) {
-                        console.error('❌ Ошибка сохранения:', err);
-                    }
-                    
-                    const msgData = {
-                        id: msgId,
-                        from: String(userId),
-                        to: String(to),
-                        text: sanitizedText,
-                        replyTo: replyTo || null,
-                        replyToText: replyToText || null,
-                        time: new Date().toISOString(),
-                        read: 0,
-                        fromUsername: 'User'
-                    };
-                    
-                    const targetWs = clients.get(String(to));
-                    if (targetWs && targetWs.readyState === WebSocket.OPEN) {
-                        targetWs.send(JSON.stringify({
-                            type: 'new_message',
-                            payload: msgData
-                        }));
-                        console.log('📤 Сообщение отправлено получателю');
-                    } else {
-                        console.log('⚠️ Получатель не в сети');
-                    }
-                    
-                    ws.send(JSON.stringify({
-                        type: 'message_sent',
-                        payload: { id: msgId, time: msgData.time }
+                // Все остальные сообщения требуют авторизации
+                if (!authenticated) {
+                    ws.send(JSON.stringify({ 
+                        type: 'error', 
+                        payload: 'Не авторизован' 
                     }));
                     return;
                 }
                 
-                if (data.type === 'typing' && userId) {
-                    console.log('⌨️ Typing от', userId, 'to:', data.payload?.to);
-                    const { to, isTyping } = data.payload || {};
+                // Rate limiting
+                const now = Date.now();
+                const userRates = messageRateLimits.get(userId) || [];
+                const recentMessages = userRates.filter(t => now - t < RATE_WINDOW);
+                
+                if (recentMessages.length >= MAX_MESSAGES) {
+                    ws.send(JSON.stringify({ 
+                        type: 'error', 
+                        payload: 'Слишком много сообщений' 
+                    }));
+                    return;
+                }
+                
+                recentMessages.push(now);
+                messageRateLimits.set(userId, recentMessages);
+                
+                // Отправка сообщения
+                if (data.type === 'message') {
+                    const { to, text, replyTo, replyToText } = data.payload || {};
                     
-                    if (!to) {
-                        console.log('⚠️ Нет получателя для typing');
+                    if (!to || !text || !text.trim()) {
+                        ws.send(JSON.stringify({ type: 'error', payload: 'Нет текста' }));
+                        return;
+                    }
+                    if (String(to) === userId) {
+                        ws.send(JSON.stringify({ type: 'error', payload: 'Нельзя себе' }));
                         return;
                     }
                     
-                    const payload = JSON.stringify({
-                        type: 'typing',
-                        payload: { from: String(userId), isTyping: !!isTyping }
+                    const msgId = Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9);
+                    const sanitizedText = text.trim().replace(/<[^>]*>/g, '').substring(0, 2000);
+                    const sanitizedReply = replyToText ? replyToText.replace(/<[^>]*>/g, '').substring(0, 100) : null;
+                    
+                    const storedText = JSON.stringify({ 
+                        text: sanitizedText, 
+                        imageUrl: null, 
+                        audioUrl: null,
+                        duration: null,
+                        replyTo: replyTo || null, 
+                        replyToText: sanitizedReply 
                     });
                     
-                    console.log(`📊 Всего клиентов: ${clients.size}`);
-                    console.log(`📊 ID клиентов: ${Array.from(clients.keys()).join(', ')}`);
+                    // Сохраняем в БД
+                    db.run(
+                        'INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', 
+                        [msgId, userId, String(to), storedText, new Date().toISOString()]
+                    );
+                    saveDb();
                     
-                    let sent = 0;
-                    for (const [id, client] of clients) {
-                        if (client.readyState === WebSocket.OPEN && String(id) !== String(userId)) {
-                            try {
-                                client.send(payload);
-                                sent++;
-                                console.log(`✅ Typing отправлен клиенту ${id}`);
-                            } catch (err) {
-                                console.error(`❌ Ошибка отправки клиенту ${id}:`, err);
-                            }
+                    const msgPayload = {
+                        type: 'new_message',
+                        payload: {
+                            id: msgId,
+                            from: userId,
+                            to: String(to),
+                            text: sanitizedText,
+                            replyTo: replyTo || null,
+                            replyToText: sanitizedReply,
+                            time: new Date().toISOString(),
+                            read: 0
                         }
+                    };
+                    
+                    // Отправляем получателю
+                    const targetWs = clients.get(String(to));
+                    if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+                        targetWs.send(JSON.stringify(msgPayload));
                     }
                     
-                    console.log(`📊 Отправлено ${sent} клиентам из ${clients.size - 1}`);
-                    
-                    if (sent === 0) {
-                        const targetWs = clients.get(String(to));
-                        if (targetWs && targetWs.readyState === WebSocket.OPEN) {
-                            try {
-                                targetWs.send(payload);
-                                console.log(`✅ Typing отправлен конкретному получателю ${to}`);
-                            } catch (err) {
-                                console.error('❌ Ошибка отправки:', err);
-                            }
-                        } else {
-                            console.log(`⚠️ Получатель ${to} не найден в клиентах или не в сети`);
-                        }
-                    }
+                    // Подтверждение отправителю
+                    ws.send(JSON.stringify({
+                        type: 'message_sent',
+                        payload: { id: msgId, time: msgPayload.payload.time }
+                    }));
                     
                     return;
                 }
                 
+                // Typing индикатор
+                if (data.type === 'typing') {
+                    const { to, isTyping } = data.payload || {};
+                    
+                    if (!to || String(to) === userId) return;
+                    
+                    // Отправляем ТОЛЬКО конкретному получателю
+                    const targetWs = clients.get(String(to));
+                    if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+                        targetWs.send(JSON.stringify({
+                            type: 'typing',
+                            payload: { 
+                                from: userId, 
+                                isTyping: !!isTyping 
+                            }
+                        }));
+                    }
+                    return;
+                }
+                
+                // Ping-pong
                 if (data.type === 'ping') {
                     ws.send(JSON.stringify({ type: 'pong', payload: { time: Date.now() } }));
                     return;
                 }
                 
-                console.log('⚠️ Неизвестный тип:', data.type);
-                
             } catch (err) {
                 console.error('❌ Ошибка обработки:', err);
-                ws.send(JSON.stringify({ 
-                    type: 'error', 
-                    payload: 'Ошибка обработки: ' + err.message 
-                }));
+                try {
+                    ws.send(JSON.stringify({ 
+                        type: 'error', 
+                        payload: 'Ошибка сервера' 
+                    }));
+                } catch (sendErr) {}
             }
         });
         
@@ -310,15 +293,34 @@ function createWebSocketServer(server) {
             if (userId) {
                 clients.delete(userId);
                 broadcastOnlineStatus(userId, false);
-                console.log(`📊 Всего клиентов: ${clients.size}`);
+                
+                try {
+                    db.run('UPDATE users SET lastSeen = ? WHERE id = ?', 
+                        [new Date().toISOString(), userId]);
+                    saveDb();
+                } catch (err) {}
             }
         });
         
         ws.on('error', (err) => {
-            console.error('❌ WebSocket ошибка:', err);
+            console.error('❌ WebSocket ошибка:', err.message);
         });
     });
     
+    // Очистка rate limit
+    setInterval(() => {
+        const now = Date.now();
+        for (const [uid, times] of messageRateLimits) {
+            const filtered = times.filter(t => now - t < RATE_WINDOW);
+            if (filtered.length === 0) {
+                messageRateLimits.delete(uid);
+            } else {
+                messageRateLimits.set(uid, filtered);
+            }
+        }
+    }, 300000);
+    
+    console.log('✅ WebSocket сервер запущен');
     return { wss, clients, broadcastOnlineStatus };
 }
 
@@ -328,5 +330,5 @@ module.exports = {
     broadcastOnlineStatus, 
     getDb,
     setDb,
-    initDb
+    setSaveDb
 };
