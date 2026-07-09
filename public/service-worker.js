@@ -1,4 +1,4 @@
-const CACHE_NAME = 'one-post-v12';
+const CACHE_NAME = 'one-post-v13';
 
 // Кэшируем только статику, НЕ главную страницу
 const ASSETS = ['/css/style.css', '/js/app.js'];
