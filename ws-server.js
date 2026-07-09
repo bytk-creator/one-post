@@ -10,54 +10,6 @@ let db;
 
 function getDb() { return db; }
 
-function queryOne(sql, params = []) {
-    if (!db) return null;
-    try {
-        const stmt = db.prepare(sql);
-        stmt.bind(params);
-        if (stmt.step()) { 
-            const row = stmt.getAsObject(); 
-            stmt.free(); 
-            return row; 
-        }
-        stmt.free();
-        return null;
-    } catch (err) {
-        console.error('❌ Query error:', err);
-        return null;
-    }
-}
-
-function getAuth(token) {
-    if (!db) {
-        console.log('⚠️ БД не инициализирована');
-        return null;
-    }
-    try {
-        const stmt = db.prepare('SELECT * FROM sessions WHERE token = ?');
-        stmt.bind([token]);
-        if (!stmt.step()) {
-            stmt.free();
-            return null;
-        }
-        const session = stmt.getAsObject();
-        stmt.free();
-        
-        const stmt2 = db.prepare('SELECT * FROM users WHERE id = ?');
-        stmt2.bind([session.userId]);
-        if (!stmt2.step()) {
-            stmt2.free();
-            return null;
-        }
-        const user = stmt2.getAsObject();
-        stmt2.free();
-        return user;
-    } catch (err) {
-        console.error('❌ Auth error:', err);
-        return null;
-    }
-}
-
 async function initDb() {
     try {
         const SQL = await initSqlJs();
@@ -82,6 +34,45 @@ async function initDb() {
         console.error('❌ WebSocket: Ошибка инициализации БД:', err);
         return false;
     }
+}
+
+function getAuth(token) {
+    if (!db) {
+        console.log('⚠️ БД не инициализирована');
+        return null;
+    }
+    try {
+        const stmt = db.prepare('SELECT * FROM sessions WHERE token = ?');
+        stmt.bind([token]);
+        if (!stmt.step()) {
+            stmt.free();
+            console.log('❌ Токен не найден в сессиях');
+            return null;
+        }
+        const session = stmt.getAsObject();
+        stmt.free();
+        
+        const stmt2 = db.prepare('SELECT * FROM users WHERE id = ?');
+        stmt2.bind([session.userId]);
+        if (!stmt2.step()) {
+            stmt2.free();
+            console.log('❌ Пользователь не найден');
+            return null;
+        }
+        const user = stmt2.getAsObject();
+        stmt2.free();
+        
+        console.log('✅ Пользователь найден:', user.username);
+        return user;
+    } catch (err) {
+        console.error('❌ Auth error:', err);
+        return null;
+    }
+}
+
+function setDb(externalDb) {
+    db = externalDb;
+    console.log('✅ WebSocket: Используем внешнюю БД');
 }
 
 const clients = new Map();
@@ -116,15 +107,15 @@ function createWebSocketServer(server) {
         const url = new URL(req.url, `http://${req.headers.host}`);
         const token = url.searchParams.get('token');
         
-        console.log('📝 Токен из URL:', token ? token.substring(0, 20) + '...' : 'НЕТ ТОКЕНА');
+        console.log('📝 Получен токен:', token ? token.substring(0, 20) + '...' : 'НЕТ ТОКЕНА');
         
         if (!token) {
-            console.log('❌ Нет токена, закрываем соединение');
+            console.log('❌ Нет токена');
             ws.send(JSON.stringify({ 
                 type: 'error', 
                 payload: 'Токен не передан' 
             }));
-            ws.close(4001, 'Токен не передан');
+            ws.close(4001);
             return;
         }
         
@@ -138,7 +129,7 @@ function createWebSocketServer(server) {
                     const { userId: uid, token: t } = data.payload || {};
                     
                     if (!t) {
-                        console.log('❌ Нет токена в auth');
+                        console.log('❌ Нет токена');
                         ws.send(JSON.stringify({ 
                             type: 'error', 
                             payload: 'Токен не передан' 
@@ -146,7 +137,6 @@ function createWebSocketServer(server) {
                         return;
                     }
                     
-                    // Инициализируем БД если нужно
                     if (!db) {
                         console.log('⏳ Инициализация БД...');
                         await initDb();
@@ -177,7 +167,7 @@ function createWebSocketServer(server) {
                 }
                 
                 if (data.type === 'message' && userId) {
-                    console.log('📨 Обработка сообщения от', userId);
+                    console.log('📨 Сообщение от', userId);
                     const { to, text, replyTo, replyToText } = data.payload || {};
                     
                     if (!to) {
@@ -212,8 +202,9 @@ function createWebSocketServer(server) {
                             [msgId, userId, String(to), storedText, new Date().toISOString()]);
                         const data = db.export();
                         fs.writeFileSync(DB_PATH, Buffer.from(data));
+                        console.log('✅ Сообщение сохранено в БД');
                     } catch (err) {
-                        console.error('❌ Ошибка сохранения сообщения:', err);
+                        console.error('❌ Ошибка сохранения:', err);
                     }
                     
                     const msgData = {
@@ -235,8 +226,6 @@ function createWebSocketServer(server) {
                             payload: msgData
                         }));
                         console.log('📤 Сообщение отправлено получателю');
-                    } else {
-                        console.log('⚠️ Получатель не в сети');
                     }
                     
                     ws.send(JSON.stringify({
@@ -247,7 +236,7 @@ function createWebSocketServer(server) {
                 }
                 
                 if (data.type === 'typing' && userId) {
-                    console.log('⌨️ Typing от', userId, 'to:', data.payload?.to);
+                    console.log('⌨️ Typing от', userId);
                     const { to, isTyping } = data.payload || {};
                     if (!to) return;
                     
@@ -267,10 +256,10 @@ function createWebSocketServer(server) {
                     return;
                 }
                 
-                console.log('⚠️ Неизвестный тип сообщения:', data.type);
+                console.log('⚠️ Неизвестный тип:', data.type);
                 
             } catch (err) {
-                console.error('❌ WebSocket ошибка обработки:', err);
+                console.error('❌ Ошибка обработки:', err);
                 ws.send(JSON.stringify({ 
                     type: 'error', 
                     payload: 'Ошибка обработки: ' + err.message 
@@ -294,13 +283,11 @@ function createWebSocketServer(server) {
     return { wss, clients, broadcastOnlineStatus };
 }
 
-// Инициализируем БД при старте
-initDb().then(success => {
-    if (success) {
-        console.log('✅ WebSocket: БД готова');
-    } else {
-        console.log('⚠️ WebSocket: БД НЕ готова');
-    }
-});
-
-module.exports = { createWebSocketServer, clients, broadcastOnlineStatus, getDb };
+module.exports = { 
+    createWebSocketServer, 
+    clients, 
+    broadcastOnlineStatus, 
+    getDb,
+    setDb,
+    initDb
+};
