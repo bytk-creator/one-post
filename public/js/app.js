@@ -14,7 +14,6 @@ let feedHasMore = true;
 let feedLoading = false;
 let feedObserver = null;
 let replyTo = null;
-let lastUnreadCount = 0;
 let notifiedMsgIds = new Set();
 
 const authBlock = document.getElementById('authBlock');
@@ -359,22 +358,15 @@ async function updateUnreadBadge() {
         if (d.count) msgBadge.textContent = d.count;
         
         if (d.count > 0) {
-            const dialogs = await apiCall('/api/dialogs', 'GET');
-            for (const dialog of dialogs) {
-                if (dialog.unread > 0) {
-                    const msgs = await apiCall('/api/messages/' + dialog.userId, 'GET');
-                    const unreadMsgs = msgs.messages.filter(m => 
-                        String(m.from) !== String(currentUser?.id) && !notifiedMsgIds.has(m.id)
-                    );
-                    for (const m of unreadMsgs) {
-                        notifiedMsgIds.add(m.id);
-                        showNotification(
-                            m.fromUsername || dialog.username,
-                            (m.text || '📷 Фото').substring(0, 100),
-                            'message'
-                        );
-                    }
-                }
+            const msgs = await apiCall('/api/unread-messages', 'GET');
+            const newMsgs = msgs.filter(m => !notifiedMsgIds.has(m.id));
+            for (const m of newMsgs) {
+                notifiedMsgIds.add(m.id);
+                showNotification(
+                    m.fromUsername || 'Сообщение',
+                    (m.text || '📷 Фото').substring(0, 100),
+                    'message'
+                );
             }
         }
     } catch (err) {}
@@ -514,7 +506,6 @@ setInterval(() => { if (currentChatPartner && !messagesPage.classList.contains('
 setInterval(() => { if (!messagesPage.classList.contains('hidden')) loadDialogs(); }, 5000);
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-// ========== УВЕДОМЛЕНИЯ ==========
 function showNotification(title, text, type = 'system') {
     let container = document.querySelector('.notification-container');
     if (!container) {
@@ -557,7 +548,6 @@ function showNotification(title, text, type = 'system') {
     }
 }
 
-// ========== РОУТИНГ ==========
 function navigateFromURL(page) {
     sidebarBtns.forEach(b => b.classList.remove('active'));
     const btn = document.querySelector(`[data-page="${page}"]`);
