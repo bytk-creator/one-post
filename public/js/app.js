@@ -492,6 +492,13 @@ function closeChat() {
     sendMessageBtn.disabled = true;
     chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог или найдите пользователя</div>';
     if (chatCloseBtn) chatCloseBtn.style.display = 'none';
+    
+    // ===== ОЧИЩАЕМ ИНДИКАТОР ПРИ ЗАКРЫТИИ ЧАТА =====
+    if (typingIndicatorEl) {
+        typingIndicatorEl.remove();
+        typingIndicatorEl = null;
+        console.log('🟣 Индикатор удалён при закрытии чата');
+    }
 }
 
 chatBackBtn.addEventListener('click', closeChat);
