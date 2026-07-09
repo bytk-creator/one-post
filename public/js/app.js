@@ -201,7 +201,7 @@ function enterApp(user) {
     authBlock.classList.add('hidden');
     appBlock.classList.remove('hidden');
     startApp();
-}
+} 
 
 async function startApp() {
     try {
