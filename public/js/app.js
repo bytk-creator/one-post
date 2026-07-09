@@ -76,6 +76,17 @@ const savePassword = document.getElementById('savePassword');
 const themeToggle = document.getElementById('themeToggle');
 const logoutBtnMobile = document.getElementById('logoutBtnMobile');
 const logoutBtnDesktop = document.getElementById('logoutBtnDesktop');
+const sidebarCollapse = document.getElementById('sidebarCollapse');
+const sidebar = document.querySelector('.sidebar');
+
+sidebarCollapse?.addEventListener('click', () => {
+    sidebar.classList.toggle('collapsed');
+    localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+});
+
+if (localStorage.getItem('sidebarCollapsed') === 'true') {
+    sidebar?.classList.add('collapsed');
+}
 
 function applyTheme(dark) {
     if (dark) { document.documentElement.setAttribute('data-theme', 'dark'); if (themeToggle) themeToggle.checked = true; }
