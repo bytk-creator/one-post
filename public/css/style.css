@@ -753,88 +753,7 @@ input, textarea, select, button { font-size: 16px !important; }
     50% { transform: scale(1.2); }
 }
 
-/* ===== ПЛЕЕР АУДИО ===== */
-.audio-message {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 180px;
-    max-width: 260px;
-    padding: 4px 0;
-}
-
-.audio-play-btn {
-    width: 34px;
-    height: 34px;
-    border: none;
-    border-radius: 50%;
-    background: var(--primary, #4F6EF7);
-    color: white;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    transition: all 0.2s ease;
-    flex-shrink: 0;
-}
-
-.audio-play-btn:hover {
-    transform: scale(1.08);
-    box-shadow: 0 2px 8px rgba(79,110,247,0.3);
-}
-
-.audio-play-btn[data-playing="true"] {
-    background: #EF4444;
-}
-
-.audio-progress {
-    flex: 1;
-    height: 4px;
-    background: var(--border, #E5E7EB);
-    border-radius: 2px;
-    overflow: hidden;
-    min-width: 50px;
-}
-
-.audio-progress-bar {
-    height: 100%;
-    background: var(--primary, #4F6EF7);
-    border-radius: 2px;
-    transition: width 0.1s linear;
-    width: 0%;
-}
-
-.audio-time {
-    font-size: 11px;
-    color: var(--text-tertiary, #9CA3AF);
-    flex-shrink: 0;
-    min-width: 30px;
-    text-align: right;
-}
-
-/* ===== МОБИЛЬНАЯ АДАПТАЦИЯ ===== */
-@media (max-width: 768px) {
-    .voice-message-btn {
-        width: 40px;
-        height: 40px;
-        min-width: 40px;
-        font-size: 18px;
-    }
-    
-    .audio-message {
-        min-width: 140px;
-        max-width: 200px;
-    }
-    
-    .audio-play-btn {
-        width: 30px;
-        height: 30px;
-        font-size: 12px;
-    }
-}
-
-/* ===== АУДИО-ПЛЕЕР В СООБЩЕНИЯХ ===== */
+/* ===== АУДИО-ПЛЕЕР ===== */
 .audio-message {
     display: flex;
     align-items: center;
@@ -887,18 +806,45 @@ input, textarea, select, button { font-size: 16px !important; }
 }
 
 .audio-time {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text-tertiary, #9CA3AF);
     flex-shrink: 0;
-    min-width: 28px;
+    min-width: 32px;
     text-align: right;
 }
 
-.message-text {
-    font-size: 15px;
-    line-height: 1.5;
-    word-wrap: break-word;
-    margin-bottom: 4px;
+/* ===== КНОПКА ЗАПИСИ ===== */
+.voice-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    border-radius: 50%;
+    border: none;
+    background: var(--primary-light, #EEF1FE);
+    color: var(--primary, #4F6EF7);
+    font-size: 20px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.25s ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    margin-right: 4px;
+}
+
+.voice-btn.recording {
+    background: #EF4444 !important;
+    color: white !important;
+    animation: pulse 0.8s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
 }
 
 @media (max-width: 768px) {
