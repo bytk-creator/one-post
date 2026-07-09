@@ -43,6 +43,14 @@ async function initDb() {
     db.run(`CREATE TABLE IF NOT EXISTS messages (
         id TEXT PRIMARY KEY, fromUserId TEXT NOT NULL, toUserId TEXT NOT NULL,
         text TEXT NOT NULL, time TEXT NOT NULL, read INTEGER DEFAULT 0)`);
+    
+    // FIX: Добавляем индексы для производительности
+    db.run(`CREATE INDEX IF NOT EXISTS idx_posts_userId ON posts(userId)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_posts_time ON posts(time DESC)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_messages_from_to ON messages(fromUserId, toUserId)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_messages_time ON messages(time DESC)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_likes_postId ON likes(postId)`);
+    
     saveDb();
 }
 
@@ -67,7 +75,11 @@ function parseFormData(req) {
             maxFileSize: 10 * 1024 * 1024, allowEmptyFiles: false
         });
         form.parse(req, (err, fields, files) => {
-            if (err) { resolve({ fields: {}, files: {} }); return; }
+            if (err) { 
+                // FIX: Возвращаем ошибку вместо пустого объекта
+                resolve({ error: err.message, fields: {}, files: {} }); 
+                return; 
+            }
             const cleanFields = {};
             Object.keys(fields).forEach(key => {
                 cleanFields[key] = Array.isArray(fields[key]) ? fields[key][0] : fields[key];
@@ -142,6 +154,16 @@ function runSql(sql, params = []) {
     saveDb();
 }
 
+// FIX: Функция санитизации текста
+function sanitizeText(text, maxLength = 1000) {
+    if (!text) return '';
+    return text
+        .trim()
+        .replace(/<[^>]*>/g, '') // Удаляем HTML теги
+        .replace(/javascript:/gi, '') // Удаляем javascript: протокол
+        .substring(0, maxLength);
+}
+
 function parseLastMsg(text) {
     if (!text) return '';
     try {
@@ -155,9 +177,18 @@ function parseLastMsg(text) {
 function parseMsgText(text) {
     try {
         const parsed = JSON.parse(text);
-        if (parsed && typeof parsed === 'object') return { text: parsed.text || '', imageUrl: parsed.imageUrl || null, replyTo: parsed.replyTo || null, replyToText: parsed.replyToText || null };
-        return { text, imageUrl: null, replyTo: null, replyToText: null };
-    } catch (e) { return { text, imageUrl: null, replyTo: null, replyToText: null }; }
+        if (parsed && typeof parsed === 'object') { 
+            return { 
+                text: parsed.text ? sanitizeText(parsed.text, 2000) : '', 
+                imageUrl: parsed.imageUrl || null, 
+                replyTo: parsed.replyTo || null, 
+                replyToText: parsed.replyToText ? sanitizeText(parsed.replyToText, 100) : null 
+            }; 
+        }
+        return { text: sanitizeText(text, 2000), imageUrl: null, replyTo: null, replyToText: null };
+    } catch (e) { 
+        return { text: sanitizeText(text, 2000), imageUrl: null, replyTo: null, replyToText: null }; 
+    }
 }
 
 function isOnline(lastSeen) {
@@ -258,20 +289,34 @@ const server = http.createServer(async (req, res) => {
         if (!currentUser) return serveJSON(res, { error: 'Войдите в аккаунт' }, 401);
         const today = new Date().toISOString().split('T')[0];
         if (queryOne('SELECT COUNT(*) as count FROM posts WHERE userId = ? AND date = ?', [currentUser.id, today]).count > 0) return serveJSON(res, { error: 'Вы уже публиковали сегодня' }, 400);
-        const { fields, files } = await parseFormData(req);
+        const result = await parseFormData(req);
+        // FIX: Проверяем ошибку парсинга
+        if (result.error) return serveJSON(res, { error: 'Ошибка загрузки файла: ' + result.error }, 400);
+        
+        const { fields, files } = result;
         const content = fields.content || '';
         if (!content.trim()) return serveJSON(res, { error: 'Пост не может быть пустым' }, 400);
+        
+        // FIX: Санитизация контента
+        const sanitizedContent = sanitizeText(content, 1000);
+        if (!sanitizedContent) return serveJSON(res, { error: 'Пост содержит недопустимые символы' }, 400);
+        
         let imageUrl = null;
         if (files.image && files.image[0]) {
             const file = files.image[0];
+            // FIX: Проверка типа файла
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            if (!allowedTypes.includes(file.mimetype)) {
+                return serveJSON(res, { error: 'Неподдерживаемый формат изображения' }, 400);
+            }
             const ext = path.extname(file.originalFilename || '.jpg');
             const fileName = Date.now() + '-' + crypto.randomBytes(4).toString('hex') + ext;
             fs.renameSync(file.filepath, path.join(UPLOADS_DIR, fileName));
             imageUrl = '/uploads/' + fileName;
         }
         const postId = Date.now().toString();
-        runSql('INSERT INTO posts (id, userId, content, imageUrl, date, time) VALUES (?, ?, ?, ?, ?, ?)', [postId, currentUser.id, content.trim(), imageUrl, today, new Date().toISOString()]);
-        return serveJSON(res, { success: true, post: { id: postId, content: content.trim(), imageUrl, author: currentUser.username } });
+        runSql('INSERT INTO posts (id, userId, content, imageUrl, date, time) VALUES (?, ?, ?, ?, ?, ?)', [postId, currentUser.id, sanitizedContent, imageUrl, today, new Date().toISOString()]);
+        return serveJSON(res, { success: true, post: { id: postId, content: sanitizedContent, imageUrl, author: currentUser.username } });
     }
 
     if (url === '/api/posts' && method === 'GET') {
@@ -322,9 +367,17 @@ const server = http.createServer(async (req, res) => {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
         const contentType = req.headers['content-type'] || '';
         if (contentType.includes('multipart/form-data')) {
-            const { files } = await parseFormData(req);
+            const result = await parseFormData(req);
+            if (result.error) return serveJSON(res, { error: 'Ошибка загрузки файла: ' + result.error }, 400);
+            const { files } = result;
+            
             if (files.avatar && files.avatar[0]) {
                 const file = files.avatar[0];
+                // FIX: Проверка типа файла
+                const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                if (!allowedTypes.includes(file.mimetype)) {
+                    return serveJSON(res, { error: 'Неподдерживаемый формат изображения' }, 400);
+                }
                 const ext = path.extname(file.originalFilename || '.jpg');
                 const fileName = 'avatar-' + currentUser.id + ext;
                 if (currentUser.avatarUrl) { const oldPath = path.join(__dirname, 'public', currentUser.avatarUrl); if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath); }
@@ -335,6 +388,11 @@ const server = http.createServer(async (req, res) => {
             }
             if (files.cover && files.cover[0]) {
                 const file = files.cover[0];
+                // FIX: Проверка типа файла
+                const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                if (!allowedTypes.includes(file.mimetype)) {
+                    return serveJSON(res, { error: 'Неподдерживаемый формат изображения' }, 400);
+                }
                 const ext = path.extname(file.originalFilename || '.jpg');
                 const fileName = 'cover-' + currentUser.id + ext;
                 if (currentUser.coverUrl) { const oldPath = path.join(__dirname, 'public', currentUser.coverUrl); if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath); }
@@ -346,9 +404,9 @@ const server = http.createServer(async (req, res) => {
             return serveJSON(res, { success: true });
         }
         const { username, password, bio } = await readBody(req);
-        const newUsername = username !== undefined ? username.trim() : currentUser.username;
+        const newUsername = username !== undefined ? sanitizeText(username, 30) : currentUser.username;
         const newPassword = password && password.trim() ? hashPassword(password.trim()) : currentUser.password;
-        const newBio = bio !== undefined ? (bio || '').substring(0, 200) : (currentUser.bio || '');
+        const newBio = bio !== undefined ? sanitizeText(bio, 200) : (currentUser.bio || '');
         if (!/^[a-zA-Z0-9_]+$/.test(newUsername)) return serveJSON(res, { error: 'OneID: только английские буквы, цифры и _' }, 400);
         if (newUsername.length < 3) return serveJSON(res, { error: 'Имя минимум 3 символа' }, 400);
         if (password && password.trim() && password.trim().length < 4) return serveJSON(res, { error: 'Пароль минимум 4 символа' }, 400);
@@ -371,25 +429,50 @@ const server = http.createServer(async (req, res) => {
         return serveJSON(res, dialogs);
     }
 
+    // FIX: Полностью переписанный обработчик сообщений с правильной пагинацией
     if (url.startsWith('/api/messages/') && url !== '/api/messages/photo' && method === 'GET') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
         const partnerId = url.split('/')[3];
         const params = new URL(req.url, 'http://localhost').searchParams;
         const before = params.get('before');
         
+        // FIX: Проверка существования пользователя
+        const targetUser = queryOne('SELECT id FROM users WHERE id = ?', [String(partnerId)]);
+        if (!targetUser) return serveJSON(res, { error: 'Пользователь не найден' }, 404);
+        
         runSql('UPDATE messages SET read = 1 WHERE fromUserId = ? AND toUserId = ? AND read = 0', [partnerId, currentUser.id]);
         
         let sql = 'SELECT messages.*, u1.username as fromUsername, u2.username as toUsername FROM messages JOIN users u1 ON messages.fromUserId = u1.id JOIN users u2 ON messages.toUserId = u2.id WHERE ((fromUserId = ? AND toUserId = ?) OR (fromUserId = ? AND toUserId = ?))';
         const sqlParams = [currentUser.id, partnerId, partnerId, currentUser.id];
-        if (before) { sql += ' AND messages.time < ?'; sqlParams.push(before); }
-        sql += ' ORDER BY messages.time DESC LIMIT 50';
         
-        const messages = queryAll(sql, sqlParams).reverse();
-        const hasMore = messages.length === 50;
+        // FIX: Правильная пагинация
+        if (before) {
+            sql += ' AND messages.time < ?';
+            sqlParams.push(before);
+        }
+        sql += ' ORDER BY messages.time DESC LIMIT 51'; // Запрашиваем 51 для проверки hasMore
+        
+        const results = queryAll(sql, sqlParams);
+        const hasMore = results.length > 50;
+        const messages = results.slice(0, 50).reverse(); // Берём 50 и переворачиваем
         
         const fixed = messages.map(m => {
             const parsed = parseMsgText(m.text);
-            return { id: String(m.id), from: String(m.fromUserId), to: String(m.toUserId), fromUserId: String(m.fromUserId), toUserId: String(m.toUserId), text: parsed.text, imageUrl: parsed.imageUrl, replyTo: parsed.replyTo, replyToText: parsed.replyToText, time: m.time, read: m.read, fromUsername: m.fromUsername, toUsername: m.toUsername };
+            return { 
+                id: String(m.id), 
+                from: String(m.fromUserId), 
+                to: String(m.toUserId), 
+                fromUserId: String(m.fromUserId), 
+                toUserId: String(m.toUserId), 
+                text: parsed.text, 
+                imageUrl: parsed.imageUrl, 
+                replyTo: parsed.replyTo, 
+                replyToText: parsed.replyToText, 
+                time: m.time, 
+                read: m.read, 
+                fromUsername: m.fromUsername, 
+                toUsername: m.toUsername 
+            };
         });
         return serveJSON(res, { messages: fixed, hasMore });
     }
@@ -409,36 +492,60 @@ const server = http.createServer(async (req, res) => {
 
     if (url === '/api/messages/photo' && method === 'POST') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
-        const { fields, files } = await parseFormData(req);
+        const result = await parseFormData(req);
+        if (result.error) return serveJSON(res, { error: 'Ошибка загрузки файла: ' + result.error }, 400);
+        
+        const { fields, files } = result;
         const to = fields.to;
         const text = fields.text || '';
         const replyTo = fields.replyTo || null;
-        const replyToText = fields.replyToText || null;
+        const replyToText = fields.replyToText ? sanitizeText(fields.replyToText, 100) : null;
+        
         if (!to) return serveJSON(res, { error: 'Получатель обязателен' }, 400);
+        
+        // FIX: Проверка существования пользователя
+        const targetUser = queryOne('SELECT id FROM users WHERE id = ?', [String(to)]);
+        if (!targetUser) return serveJSON(res, { error: 'Пользователь не найден' }, 404);
+        
         if (String(to) === String(currentUser.id)) return serveJSON(res, { error: 'Нельзя себе' }, 400);
+        
         let imageUrl = null;
         if (files.image && files.image[0]) {
             const file = files.image[0];
+            // FIX: Проверка типа файла
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            if (!allowedTypes.includes(file.mimetype)) {
+                return serveJSON(res, { error: 'Неподдерживаемый формат изображения' }, 400);
+            }
             const ext = path.extname(file.originalFilename || '.jpg');
             const fileName = 'chat-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex') + ext;
             fs.renameSync(file.filepath, path.join(UPLOADS_DIR, fileName));
             imageUrl = '/uploads/' + fileName;
         }
         const msgId = Date.now().toString();
-        const storedText = JSON.stringify({ text: (text || '').trim(), imageUrl, replyTo, replyToText });
+        const sanitizedText = sanitizeText(text, 2000);
+        const storedText = JSON.stringify({ text: sanitizedText, imageUrl, replyTo, replyToText });
         runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, String(to), storedText, new Date().toISOString()]);
-        return serveJSON(res, { success: true, message: { id: msgId, from: String(currentUser.id), to: String(to), text: text.trim(), imageUrl, replyTo, replyToText, fromUsername: currentUser.username } });
+        return serveJSON(res, { success: true, message: { id: msgId, from: String(currentUser.id), to: String(to), text: sanitizedText, imageUrl, replyTo, replyToText, fromUsername: currentUser.username } });
     }
 
     if (url === '/api/messages' && method === 'POST') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
         const { to, text, replyTo, replyToText } = await readBody(req);
         if (!to || !text || !text.trim()) return serveJSON(res, { error: 'Получатель и текст обязательны' }, 400);
+        
+        // FIX: Проверка существования пользователя
+        const targetUser = queryOne('SELECT id FROM users WHERE id = ?', [String(to)]);
+        if (!targetUser) return serveJSON(res, { error: 'Пользователь не найден' }, 404);
+        
         if (String(to) === String(currentUser.id)) return serveJSON(res, { error: 'Нельзя себе' }, 400);
+        
         const msgId = Date.now().toString();
-        const storedText = JSON.stringify({ text: text.trim(), imageUrl: null, replyTo: replyTo || null, replyToText: replyToText || null });
+        const sanitizedText = sanitizeText(text, 2000);
+        const sanitizedReplyText = replyToText ? sanitizeText(replyToText, 100) : null;
+        const storedText = JSON.stringify({ text: sanitizedText, imageUrl: null, replyTo: replyTo || null, replyToText: sanitizedReplyText });
         runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, String(to), storedText, new Date().toISOString()]);
-        return serveJSON(res, { success: true, message: { id: msgId, from: String(currentUser.id), to: String(to), text: text.trim(), replyTo, replyToText, fromUsername: currentUser.username } });
+        return serveJSON(res, { success: true, message: { id: msgId, from: String(currentUser.id), to: String(to), text: sanitizedText, replyTo, replyToText: sanitizedReplyText, fromUsername: currentUser.username } });
     }
 
     if (url.startsWith('/api/users/search') && method === 'GET') {
@@ -474,5 +581,24 @@ const server = http.createServer(async (req, res) => {
 
 initDb().then(() => {
     const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => console.log('Сервер на порту ' + PORT));
+    server.listen(PORT, () => console.log('🚀 Сервер запущен на порту ' + PORT));
+});
+
+// FIX: Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('🛑 Получен SIGTERM, сохраняем БД...');
+    saveDb();
+    server.close(() => {
+        console.log('✅ Сервер остановлен');
+        process.exit(0);
+    });
+});
+
+process.on('SIGINT', () => {
+    console.log('🛑 Получен SIGINT, сохраняем БД...');
+    saveDb();
+    server.close(() => {
+        console.log('✅ Сервер остановлен');
+        process.exit(0);
+    });
 });
