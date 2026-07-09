@@ -439,7 +439,18 @@ async function loadMessages(before = null, prepend = false) {
             }
             inner += (m.text ? esc(m.text) : '');
             inner += (m.imageUrl ? `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">` : '');
-            inner += `<div class="message-time">${t}</div>`;
+            
+            // Статус прочтения — галочки как в WhatsApp
+            let checkmark = '';
+            if (String(m.from) === String(currentUser.id)) {
+                if (m.read) {
+                    checkmark = '<span style="color:#4F6EF7;font-size:11px;margin-left:4px;" title="Прочитано">✓✓</span>';
+                } else {
+                    checkmark = '<span style="color:#9CA3AF;font-size:11px;margin-left:4px;" title="Доставлено">✓</span>';
+                }
+            }
+            inner += `<div class="message-time">${t}${checkmark}</div>`;
+            
             div.innerHTML = inner;
             
             div.querySelector('.message-reply')?.addEventListener('click', (e) => {
