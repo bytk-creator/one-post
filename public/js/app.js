@@ -82,6 +82,29 @@ tabBtns.forEach(btn => {
     });
 });
 
+document.getElementById('regPassword').addEventListener('input', function() {
+    const p = this.value;
+    const bar = document.querySelector('.strength-bar');
+    const txt = document.querySelector('.strength-text');
+    let score = 0;
+    if (p.length >= 4) score++;
+    if (p.length >= 8) score++;
+    if (/[A-ZА-Я]/.test(p)) score++;
+    if (/[0-9]/.test(p)) score++;
+    if (/[^A-Za-z0-9А-Яа-я]/.test(p)) score++;
+    const levels = [
+        { w: '0%', c: '#E5E7EB', t: '' },
+        { w: '25%', c: '#EF4444', t: 'Слабый' },
+        { w: '50%', c: '#F59E0B', t: 'Средний' },
+        { w: '75%', c: '#3B82F6', t: 'Хороший' },
+        { w: '100%', c: '#10B981', t: 'Надёжный' }
+    ];
+    const l = levels[Math.min(score, 4)];
+    bar.style.width = l.w;
+    bar.style.background = l.c;
+    txt.textContent = l.t;
+});
+
 async function apiCall(url, method, body = null) {
     const h = {};
     if (body && !(body instanceof FormData)) h['Content-Type'] = 'application/json';
