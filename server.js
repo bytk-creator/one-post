@@ -165,7 +165,6 @@ function isOnline(lastSeen) {
     return (new Date() - new Date(lastSeen)) < 60000;
 }
 
-// Генерация PWA-иконок
 (function generateIcons() {
     [192, 512].forEach(size => {
         const p = path.join(__dirname, 'public', `icon-${size}.svg`);
@@ -385,6 +384,19 @@ const server = http.createServer(async (req, res) => {
         return serveJSON(res, { messages: fixed, hasMore });
     }
 
+    if (url === '/api/unread-messages' && method === 'GET') {
+        if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
+        const messages = queryAll(
+            'SELECT messages.*, u1.username as fromUsername FROM messages JOIN users u1 ON messages.fromUserId = u1.id WHERE messages.toUserId = ? AND messages.read = 0 ORDER BY messages.time DESC LIMIT 20',
+            [currentUser.id]
+        );
+        const fixed = messages.map(m => {
+            const parsed = parseMsgText(m.text);
+            return { id: String(m.id), from: String(m.fromUserId), text: parsed.text, fromUsername: m.fromUsername, time: m.time };
+        });
+        return serveJSON(res, fixed);
+    }
+
     if (url === '/api/messages/photo' && method === 'POST') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
         const { fields, files } = await parseFormData(req);
@@ -441,7 +453,7 @@ const server = http.createServer(async (req, res) => {
     if (url === '/service-worker.js') return serveFile(res, 'public/service-worker.js', 'application/javascript');
     if (url.match(/^\/icon-\d+\.svg$/)) return serveFile(res, 'public' + url, 'image/svg+xml');
 
-    // SPA — все остальные GET-запросы отдают index.html
+    // SPA
     if (method === 'GET' && !url.startsWith('/api/') && !url.startsWith('/uploads/')) {
         return serveFile(res, 'public/index.html', 'text/html');
     }
