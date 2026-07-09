@@ -677,11 +677,7 @@ function connectWebSocket() {
     
     try {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = window.location.hostname || 'localhost';
-        const port = window.location.port || '3000';
-        
-        // Для Railway используем тот же хост
-        const wsUrl = `${protocol}//${host}/ws?token=${token}`;
+        const wsUrl = `${protocol}//${window.location.host}/ws?token=${token}`;
         
         console.log('🔌 Подключение к WebSocket:', wsUrl);
         ws = new WebSocket(wsUrl);
