@@ -986,45 +986,37 @@ console.log('✅ WebSocket клиент готов');
     }
 })();
 
-// ===== ГОЛОСОВЫЕ СООБЩЕНИЯ (ПОСТОЯННЫЙ ФИКС) =====
+// ===== ГОЛОСОВЫЕ СООБЩЕНИЯ =====
 (function initVoiceMessages() {
-    console.log('🎙 Инициализация голосовых сообщений...');
+    console.log('🎙 Запуск голосовых сообщений...');
     
-    // Переменные для записи
     let isRecording = false;
     let mediaRecorder = null;
     let audioChunks = [];
     let voiceBtn = null;
     
-    // Функция создания кнопки
     function createVoiceButton() {
         const chatInput = document.querySelector('.chat-input');
         if (!chatInput) {
-            console.log('⏳ Чат не найден, повтор через 1с...');
             setTimeout(createVoiceButton, 1000);
             return;
         }
         
         // Удаляем старые кнопки
-        document.querySelectorAll('#voiceBtnFinal, #micBtn, #micBtnUniversal, #micBtnMobile, #voiceBtnOld, #voiceBtnNew').forEach(el => el.remove());
+        document.querySelectorAll('#voiceBtnFinal, #micBtn, #micBtnUniversal, #micBtnMobile').forEach(el => el.remove());
         
-        // Создаём кнопку
         voiceBtn = document.createElement('button');
         voiceBtn.id = 'voiceBtnFinal';
         voiceBtn.textContent = '🎙';
         voiceBtn.type = 'button';
-        voiceBtn.className = 'voice-message-btn';
-        voiceBtn.setAttribute('aria-label', 'Записать голосовое сообщение');
-        
-        // Стили
         voiceBtn.style.cssText = `
             width: 44px;
             height: 44px;
             min-width: 44px;
             border-radius: 50%;
             border: none;
-            background: var(--primary-light, #EEF1FE);
-            color: var(--primary, #4F6EF7);
+            background: #EEF1FE;
+            color: #4F6EF7;
             font-size: 20px;
             cursor: pointer;
             display: inline-flex;
@@ -1036,11 +1028,9 @@ console.log('✅ WebSocket клиент готов');
             -webkit-tap-highlight-color: transparent;
             user-select: none;
             -webkit-user-select: none;
-            position: relative;
-            z-index: 5;
+            margin-right: 4px;
         `;
         
-        // Находим поле ввода
         const messageInput = document.getElementById('messageInput');
         if (messageInput) {
             chatInput.insertBefore(voiceBtn, messageInput);
@@ -1050,214 +1040,137 @@ console.log('✅ WebSocket клиент готов');
         
         console.log('✅ Кнопка микрофона создана');
         
-        // Обработчики событий
         voiceBtn.addEventListener('click', handleVoiceClick);
         voiceBtn.addEventListener('touchstart', function(e) {
-            // Для мобильных — предотвращаем двойной вызов
-            if (!this._touchHandled) {
-                this._touchHandled = true;
-                handleVoiceClick.call(this, e);
-                setTimeout(() => { this._touchHandled = false; }, 300);
-            }
+            e.preventDefault();
+            handleVoiceClick.call(this, e);
         });
     }
     
-    // Обработчик клика по кнопке
     function handleVoiceClick(e) {
         e.preventDefault();
         e.stopPropagation();
         
-        console.log('🎙 Клик по кнопке, isRecording:', isRecording);
+        console.log('🎙 Клик, isRecording:', isRecording);
         
-        // Если уже записываем — останавливаем
         if (isRecording) {
             stopRecording();
             return;
         }
-        
-        // Начинаем запись
         startRecording();
     }
     
-    // Начать запись
     function startRecording() {
-        console.log('🎙 Запуск записи...');
+        console.log('🎙 Начинаем запись...');
         
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            showNotification('Ошибка', 'Ваш браузер не поддерживает запись голоса', 'system');
+            alert('Ваш браузер не поддерживает запись голоса');
             return;
         }
         
-        navigator.mediaDevices.getUserMedia({ 
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true
-            } 
-        })
-        .then(function(stream) {
-            console.log('✅ Микрофон доступен');
-            
-            audioChunks = [];
-            isRecording = true;
-            
-            // Меняем вид кнопки
-            if (voiceBtn) {
-                voiceBtn.textContent = '⏹';
-                voiceBtn.style.background = '#EF4444';
-                voiceBtn.style.color = 'white';
-                voiceBtn.style.transform = 'scale(1.1)';
-                voiceBtn.style.boxShadow = '0 0 20px rgba(239, 68, 68, 0.4)';
-                voiceBtn.classList.add('recording');
-            }
-            
-            // Создаём MediaRecorder
-            const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
-            mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
-            
-            mediaRecorder.ondataavailable = function(event) {
-                if (event.data.size > 0) {
-                    audioChunks.push(event.data);
-                }
-            };
-            
-            mediaRecorder.onstop = function() {
-                console.log('⏹ Запись остановлена');
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(function(stream) {
+                console.log('✅ Микрофон доступен');
+                audioChunks = [];
+                isRecording = true;
                 
-                const blob = new Blob(audioChunks, { type: mimeType });
-                console.log('📦 Размер записи:', blob.size, 'байт');
-                
-                // Возвращаем кнопку в исходное состояние
                 if (voiceBtn) {
-                    voiceBtn.textContent = '🎙';
-                    voiceBtn.style.background = '';
-                    voiceBtn.style.color = '';
-                    voiceBtn.style.transform = '';
-                    voiceBtn.style.boxShadow = '';
-                    voiceBtn.classList.remove('recording');
+                    voiceBtn.textContent = '⏹';
+                    voiceBtn.style.background = '#EF4444';
+                    voiceBtn.style.color = 'white';
                 }
                 
-                isRecording = false;
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+                mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
                 
-                // Отправляем если есть
-                if (blob.size > 2000) {
-                    sendVoiceMessage(blob);
-                } else if (blob.size > 0) {
-                    showNotification('Предупреждение', 'Запись слишком короткая', 'system');
-                }
+                mediaRecorder.ondataavailable = function(event) {
+                    if (event.data.size > 0) audioChunks.push(event.data);
+                };
                 
-                // Останавливаем все треки
-                stream.getTracks().forEach(function(track) { track.stop(); });
-                mediaRecorder = null;
-            };
-            
-            mediaRecorder.start(1000);
-            
-            // Авто-остановка через 60 секунд
-            setTimeout(function() {
-                if (mediaRecorder && mediaRecorder.state === 'recording') {
-                    mediaRecorder.stop();
-                }
-            }, 60000);
-        })
-        .catch(function(err) {
-            console.error('❌ Ошибка доступа к микрофону:', err);
-            let message = 'Нет доступа к микрофону. ';
-            if (err.name === 'NotAllowedError') {
-                message += 'Разрешите доступ в настройках браузера.';
-            } else if (err.name === 'NotFoundError') {
-                message += 'Микрофон не найден.';
-            } else {
-                message += 'Попробуйте перезагрузить страницу.';
-            }
-            showNotification('Ошибка', message, 'system');
-        });
+                mediaRecorder.onstop = function() {
+                    const blob = new Blob(audioChunks, { type: mimeType });
+                    console.log('📦 Размер записи:', blob.size);
+                    
+                    if (voiceBtn) {
+                        voiceBtn.textContent = '🎙';
+                        voiceBtn.style.background = '#EEF1FE';
+                        voiceBtn.style.color = '#4F6EF7';
+                    }
+                    isRecording = false;
+                    
+                    if (blob.size > 2000) {
+                        sendVoiceMessage(blob);
+                    } else if (blob.size > 0) {
+                        alert('Запись слишком короткая');
+                    }
+                    
+                    stream.getTracks().forEach(function(track) { track.stop(); });
+                    mediaRecorder = null;
+                };
+                
+                mediaRecorder.start(1000);
+                
+                setTimeout(function() {
+                    if (mediaRecorder && mediaRecorder.state === 'recording') {
+                        mediaRecorder.stop();
+                    }
+                }, 60000);
+            })
+            .catch(function(err) {
+                console.error('❌ Ошибка:', err);
+                alert('Нет доступа к микрофону');
+            });
     }
     
-    // Остановить запись
     function stopRecording() {
-        console.log('⏹ Остановка записи по запросу...');
+        console.log('⏹ Остановка записи...');
         if (mediaRecorder && mediaRecorder.state === 'recording') {
             mediaRecorder.stop();
         } else {
-            // Если медиарекордер не активен — просто сбрасываем состояние
+            isRecording = false;
             if (voiceBtn) {
                 voiceBtn.textContent = '🎙';
-                voiceBtn.style.background = '';
-                voiceBtn.style.color = '';
-                voiceBtn.style.transform = '';
-                voiceBtn.style.boxShadow = '';
-                voiceBtn.classList.remove('recording');
+                voiceBtn.style.background = '#EEF1FE';
+                voiceBtn.style.color = '#4F6EF7';
             }
-            isRecording = false;
         }
     }
     
-    // Отправить голосовое
     function sendVoiceMessage(blob) {
-        // Определяем получателя
         let to = window.currentChatPartner;
         
-        // Если не нашли — ищем в DOM
         if (!to) {
             const activeDialog = document.querySelector('.dialog-item.active');
-            if (activeDialog) {
-                to = activeDialog.dataset.userId;
-                console.log('🔍 Нашли получателя из диалога:', to);
-            }
+            if (activeDialog) to = activeDialog.dataset.userId;
         }
-        
-        // Если всё ещё нет — ищем в заголовке чата
         if (!to) {
             const header = document.getElementById('chatPartnerText');
             if (header) {
-                const html = header.innerHTML;
-                const match = html.match(/data-userid="([^"]+)"/);
-                if (match) {
-                    to = match[1];
-                    console.log('🔍 Нашли получателя из заголовка:', to);
-                }
+                const match = header.innerHTML.match(/data-userid="([^"]+)"/);
+                if (match) to = match[1];
             }
         }
         
-        // Пробуем найти по тексту
-        if (!to) {
-            const headerText = document.getElementById('chatPartnerText');
-            if (headerText) {
-                const text = headerText.textContent.trim();
-                // Ищем цифры в тексте (ID пользователя)
-                const match = text.match(/\d{13}/);
-                if (match) {
-                    to = match[0];
-                    console.log('🔍 Нашли получателя из текста:', to);
-                }
-            }
-        }
-        
-        console.log('🔍 Итоговый получатель:', to);
+        console.log('🔍 Получатель:', to);
         
         if (!to) {
-            showNotification('Ошибка', 'Не удалось определить получателя. Откройте чат.', 'system');
+            alert('❌ Откройте чат с собеседником');
             return;
         }
-        
-        const token = localStorage.getItem('token');
-        if (!token) {
-            showNotification('Ошибка', 'Вы не авторизованы', 'system');
-            return;
-        }
-        
-        // Рассчитываем длительность (примерно)
-        const duration = Math.max(1, Math.round(blob.size / 16000));
         
         const fd = new FormData();
         fd.append('to', to);
         fd.append('audio', blob, 'voice.webm');
-        fd.append('duration', duration);
+        fd.append('duration', Math.round(blob.size / 16000) || 1);
         
-        console.log('📤 Отправка голосового (длительность: ' + duration + 'с)...');
+        const token = localStorage.getItem('token');
+        if (!token) {
+            alert('❌ Вы не авторизованы');
+            return;
+        }
         
-        // Показываем индикатор отправки
+        console.log('📤 Отправка...');
+        
         if (voiceBtn) {
             voiceBtn.textContent = '⏳';
             voiceBtn.style.background = '#F59E0B';
@@ -1270,18 +1183,21 @@ console.log('✅ WebSocket клиент готов');
             body: fd
         })
         .then(function(r) {
+            console.log('📡 Статус:', r.status);
             if (!r.ok) {
-                return r.json().then(function(err) {
-                    throw new Error(err.error || 'Ошибка отправки');
+                return r.text().then(function(text) {
+                    try {
+                        const err = JSON.parse(text);
+                        throw new Error(err.error || 'Ошибка сервера');
+                    } catch(e) {
+                        throw new Error('Ошибка: ' + text);
+                    }
                 });
             }
             return r.json();
         })
         .then(function(data) {
             console.log('✅ Голосовое отправлено!', data);
-            showNotification('Успех', 'Голосовое сообщение отправлено', 'system');
-            
-            // Обновляем чат
             if (window.loadMessages) {
                 window.lastMessagesHash = '';
                 window.loadMessages();
@@ -1291,60 +1207,27 @@ console.log('✅ WebSocket клиент готов');
             }
         })
         .catch(function(err) {
-            console.error('❌ Ошибка отправки:', err);
-            showNotification('Ошибка', err.message || 'Не удалось отправить голосовое', 'system');
+            console.error('❌ Ошибка:', err);
+            alert('❌ ' + err.message);
         })
         .finally(function() {
-            // Возвращаем кнопку
             if (voiceBtn && !isRecording) {
                 voiceBtn.textContent = '🎙';
-                voiceBtn.style.background = '';
-                voiceBtn.style.color = '';
+                voiceBtn.style.background = '#EEF1FE';
+                voiceBtn.style.color = '#4F6EF7';
             }
         });
     }
     
-    // Функция для показа уведомлений (если есть своя — используем её)
-    function showNotification(title, text, type) {
-        if (typeof window.showNotification === 'function') {
-            window.showNotification(title, text, type);
-        } else {
-            // Простой fallback
-            console.log('📢 ' + title + ': ' + text);
-            const container = document.querySelector('.notification-container');
-            if (container) {
-                const notif = document.createElement('div');
-                notif.className = 'notification';
-                notif.innerHTML = `
-                    <div class="notif-body">
-                        <div class="notif-title">${title}</div>
-                        <div class="notif-text">${text}</div>
-                    </div>
-                `;
-                container.appendChild(notif);
-                setTimeout(function() {
-                    if (notif.parentNode) notif.remove();
-                }, 3000);
-            } else {
-                alert(title + ': ' + text);
-            }
-        }
-    }
-    
-    // Запускаем создание кнопки
     setTimeout(createVoiceButton, 500);
     
-    // Перехватываем открытие чата для добавления кнопки
     const originalOpenChat = window.openChat;
     if (typeof originalOpenChat === 'function') {
         window.openChat = function(uid, un, avUrl) {
-            if (originalOpenChat) {
-                originalOpenChat(uid, un, avUrl);
-            }
-            // Добавляем кнопку после открытия чата
+            if (originalOpenChat) originalOpenChat(uid, un, avUrl);
             setTimeout(createVoiceButton, 300);
         };
     }
     
-    console.log('✅ Голосовые сообщения инициализированы!');
+    console.log('✅ Голосовые сообщения готовы!');
 })();
