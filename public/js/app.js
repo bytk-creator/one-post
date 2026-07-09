@@ -73,21 +73,15 @@ const logoutBtnMobile = document.getElementById('logoutBtnMobile');
 const logoutBtnDesktop = document.getElementById('logoutBtnDesktop');
 
 function applyTheme(dark) {
-    if (dark) {
-        document.documentElement.setAttribute('data-theme', 'dark');
-        if (themeToggle) themeToggle.checked = true;
-    } else {
-        document.documentElement.removeAttribute('data-theme');
-        if (themeToggle) themeToggle.checked = false;
-    }
+    if (dark) { document.documentElement.setAttribute('data-theme', 'dark'); if (themeToggle) themeToggle.checked = true; }
+    else { document.documentElement.removeAttribute('data-theme'); if (themeToggle) themeToggle.checked = false; }
 }
 const savedTheme = localStorage.getItem('theme');
-applyTheme(savedTheme === 'dark' || (!savedTheme && matchMedia('(prefers-color-scheme:dark)').matches));
-themeToggle?.addEventListener('change', () => {
-    const d = themeToggle.checked;
-    applyTheme(d);
-    localStorage.setItem('theme', d ? 'dark' : 'light');
-});
+if (savedTheme === 'dark') applyTheme(true);
+else if (savedTheme === 'light') applyTheme(false);
+else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) applyTheme(true);
+else applyTheme(false);
+themeToggle?.addEventListener('change', () => { const d = themeToggle.checked; applyTheme(d); localStorage.setItem('theme', d ? 'dark' : 'light'); });
 
 tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -196,6 +190,8 @@ async function startApp() {
         currentUser = d.user; currentUser.id = String(currentUser.id); canPostToday = d.canPost;
         updateAllUI(); updateCreatePostUI(); loadFeed(); updateUnreadBadge();
         unreadInterval = setInterval(updateUnreadBadge, 5000);
+        setInterval(() => { if (token) apiCall('/api/ping', 'POST').catch(() => {}); }, 30000);
+        apiCall('/api/ping', 'POST').catch(() => {});
     } catch (err) { logout(); }
 }
 
@@ -290,6 +286,10 @@ function setupFeedObserver() {
     feedObserver.observe(sentinel);
 }
 
+function onlineDot(online) {
+    return online ? '<span style="display:inline-block;width:10px;height:10px;background:#10B981;border-radius:50%;margin-left:6px;flex-shrink:0;" title="Онлайн"></span>' : '';
+}
+
 async function viewProfile(userId) {
     viewingUserId = userId; sidebarBtns.forEach(b => b.classList.remove('active'));
     feedPageEl.classList.add('hidden'); messagesPage.classList.add('hidden'); settingsPage.classList.add('hidden'); profilePage.classList.remove('hidden');
@@ -300,7 +300,7 @@ async function viewProfile(userId) {
         const sn = user.username.replace(/'/g, "\\'");
         let mb = ''; if (String(userId) !== String(currentUser.id)) mb = `<button class="btn-msg" onclick="msgFromProfile('${userId}','${sn}')">Написать</button>`;
         const av = user.avatarUrl ? `<div class="profile-avatar-wrapper"><img src="${user.avatarUrl}" alt="Аватар" loading="lazy"></div>` : `<div class="profile-avatar-placeholder">${user.username.charAt(0).toUpperCase()}</div>`;
-        profilePage.innerHTML = `<div class="profile-card">${av}<div class="profile-name">${esc(user.username)}</div>${user.bio ? `<div class="profile-bio">${esc(user.bio)}</div>` : ''}<div class="profile-date">На сайте с ${jd}</div><div class="profile-stats"><div><div class="stat-num">${user.totalPosts}</div><div class="stat-label">постов</div></div><div><div class="stat-num">${user.streak}🔥</div><div class="stat-label">дней</div></div></div><div class="profile-btns">${mb}<button class="btn-back-profile" onclick="goToFeed()">← Назад</button></div></div>`;
+        profilePage.innerHTML = `<div class="profile-card">${av}<div class="profile-name">${esc(user.username)}${onlineDot(user.online)}</div>${user.bio ? `<div class="profile-bio">${esc(user.bio)}</div>` : ''}<div class="profile-date">На сайте с ${jd}</div><div class="profile-stats"><div><div class="stat-num">${user.totalPosts}</div><div class="stat-label">постов</div></div><div><div class="stat-num">${user.streak}🔥</div><div class="stat-label">дней</div></div></div><div class="profile-btns">${mb}<button class="btn-back-profile" onclick="goToFeed()">← Назад</button></div></div>`;
         const posts = await apiCall('/api/user/' + userId + '/posts', 'GET');
         const pc = document.createElement('div'); pc.className = 'profile-posts';
         if (!posts || !posts.length) { pc.innerHTML = '<div class="empty-feed"><h3>Нет постов</h3></div>'; }
@@ -342,7 +342,7 @@ savePassword.addEventListener('click', async () => { const p = settingsPassword.
 function showOk(m) { settingsSuccess.textContent = '✅ ' + m; settingsSuccess.classList.remove('hidden'); setTimeout(() => settingsSuccess.classList.add('hidden'), 3000); }
 
 async function updateUnreadBadge() { try { const d = await apiCall('/api/unread', 'GET'); msgBadge.classList.toggle('hidden', !d.count); if (d.count) msgBadge.textContent = d.count; } catch (err) {} }
-async function loadDialogs() { try { const dialogs = await apiCall('/api/dialogs', 'GET'); dialogsList.innerHTML = ''; if (!dialogs.length) { dialogsList.innerHTML = '<div class="no-dialogs">Нет диалогов</div>'; } dialogs.forEach(d => { const div = document.createElement('div'); div.className = 'dialog-item'; if (String(currentChatPartner) === String(d.userId)) div.classList.add('active'); const t = d.lastTime ? new Date(d.lastTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''; div.innerHTML = `<div class="dialog-avatar">${d.avatarUrl ? `<img src="${d.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" loading="lazy">` : d.username.charAt(0).toUpperCase()}</div><div class="dialog-info"><div class="dialog-name">${esc(d.username)}</div><div class="dialog-last">${esc((d.lastMessage || '').substring(0, 30))}</div></div><div class="dialog-meta"><div class="dialog-time">${t}</div>${d.unread > 0 ? `<div class="unread-badge">${d.unread}</div>` : ''}</div>`; div.addEventListener('click', () => openChat(d.userId, d.username, d.avatarUrl)); dialogsList.appendChild(div); }); } catch (err) {} }
+async function loadDialogs() { try { const dialogs = await apiCall('/api/dialogs', 'GET'); dialogsList.innerHTML = ''; if (!dialogs.length) { dialogsList.innerHTML = '<div class="no-dialogs">Нет диалогов</div>'; } dialogs.forEach(d => { const div = document.createElement('div'); div.className = 'dialog-item'; if (String(currentChatPartner) === String(d.userId)) div.classList.add('active'); const t = d.lastTime ? new Date(d.lastTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''; div.innerHTML = `<div class="dialog-avatar">${d.avatarUrl ? `<img src="${d.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" loading="lazy">` : d.username.charAt(0).toUpperCase()}</div><div class="dialog-info"><div class="dialog-name">${esc(d.username)}${onlineDot(d.online)}</div><div class="dialog-last">${esc((d.lastMessage || '').substring(0, 30))}</div></div><div class="dialog-meta"><div class="dialog-time">${t}</div>${d.unread > 0 ? `<div class="unread-badge">${d.unread}</div>` : ''}</div>`; div.addEventListener('click', () => openChat(d.userId, d.username, d.avatarUrl)); dialogsList.appendChild(div); }); } catch (err) {} }
 let st; searchUserInput.addEventListener('input', () => { clearTimeout(st); const q = searchUserInput.value.trim(); if (!q) { searchResults.classList.add('hidden'); return; } st = setTimeout(async () => { try { const users = await apiCall('/api/users/search?q=' + encodeURIComponent(q), 'GET'); searchResults.classList.remove('hidden'); searchResults.innerHTML = ''; if (!users.length) searchResults.innerHTML = '<div class="search-result-item" style="color:var(--text-secondary);">Никого нет</div>'; users.forEach(u => { const div = document.createElement('div'); div.className = 'search-result-item'; div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '10px'; div.style.padding = '12px 14px'; const av = u.avatarUrl ? `<img src="${u.avatarUrl}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:36px;height:36px;border-radius:50%;background:var(--avatar-gradient,linear-gradient(135deg,#4F6EF7,#7B8CFF));color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;">${u.username.charAt(0).toUpperCase()}</div>`; div.innerHTML = av + '<span style="font-size:14px;font-weight:600;">' + esc(u.username) + '</span>'; div.addEventListener('click', () => { openChat(u.id, u.username, u.avatarUrl); searchUserInput.value = ''; searchResults.classList.add('hidden'); }); searchResults.appendChild(div); }); } catch (err) {} }, 300); });
 function openChat(uid, un, avUrl) { currentChatPartner = String(uid); lastMessagesHash = ''; messagesHasMore = true; messagesLoading = false; const av = avUrl ? `<img src="${avUrl}" class="chat-partner-avatar-img" alt="" loading="lazy">` : `<div class="chat-partner-avatar-placeholder">${un.charAt(0).toUpperCase()}</div>`; chatPartnerText.innerHTML = `<span class="chat-partner-info" data-userid="${uid}" style="display:flex;align-items:center;gap:10px;cursor:pointer;">${av}<span>${esc(un)}</span></span>`; chatPartnerText.querySelector('.chat-partner-info')?.addEventListener('click', (e) => { e.stopPropagation(); viewProfile(uid); }); messageInput.disabled = false; if (!chatPhoto && !messageInput.value.trim()) sendMessageBtn.disabled = true; loadMessages(); loadDialogs(); if (innerWidth <= 768) { dialogsSidebar.classList.add('chat-open'); messagesLayout.classList.add('mobile-view'); } }
 chatBackBtn.addEventListener('click', () => { dialogsSidebar.classList.remove('chat-open'); messagesLayout.classList.remove('mobile-view'); currentChatPartner = null; lastMessagesHash = ''; chatPartnerText.textContent = 'Выберите диалог'; messageInput.disabled = true; sendMessageBtn.disabled = true; chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог или найдите пользователя</div>'; });
