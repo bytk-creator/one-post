@@ -68,7 +68,7 @@ const chatBackBtn = document.getElementById('chatBackBtn');
 const chatCloseBtn = document.getElementById('chatCloseBtn');
 const chatPartnerText = document.getElementById('chatPartnerText');
 const chatMessages = document.getElementById('chatMessages');
-const messageInput = document.getElementById('messageInput');
+let messageInput = document.getElementById('messageInput');
 const sendMessageBtn = document.getElementById('sendMessageBtn');
 const searchUserInput = document.getElementById('searchUserInput');
 const searchResults = document.getElementById('searchResults');
@@ -927,6 +927,37 @@ function openChat(uid, un, avUrl) {
         dialogsSidebar.classList.add('chat-open'); 
         messagesLayout.classList.add('mobile-view'); 
     }
+    
+    // ===== ВЕШАЕМ ОБРАБОТЧИК TYPING =====
+    setTimeout(() => {
+        const input = document.getElementById('messageInput');
+        if (input) {
+            // Удаляем старые обработчики
+            const newInput = input.cloneNode(true);
+            input.parentNode.replaceChild(newInput, input);
+            
+            // Вешаем новый обработчик
+            newInput.addEventListener('input', function() {
+                const hasText = this.value.trim().length > 0;
+                
+                clearTimeout(typingTimer);
+                
+                if (hasText && wsConnected && currentChatPartner) {
+                    sendTypingWithRetry(true);
+                    typingTimer = setTimeout(() => {
+                        sendTypingWithRetry(false);
+                    }, 3000);
+                } else {
+                    sendTypingWithRetry(false);
+                }
+            });
+            
+            // Обновляем глобальную ссылку
+            messageInput = newInput;
+            
+            console.log('✅ Обработчик typing добавлен');
+        }
+    }, 200);
 }
 
 function closeChat() {
@@ -949,14 +980,12 @@ function closeChat() {
         typingIndicatorEl.remove();
         typingIndicatorEl = null;
     }
+    
+    clearTimeout(typingTimer);
 }
 
 chatBackBtn.addEventListener('click', closeChat);
 chatCloseBtn?.addEventListener('click', closeChat);
-
-messageInput.addEventListener('input', () => { 
-    sendMessageBtn.disabled = !(messageInput.value.trim() || chatPhoto); 
-});
 
 // ===== ЗАГРУЗКА СООБЩЕНИЙ =====
 async function loadMessages(before = null, prepend = false) {
@@ -1080,6 +1109,7 @@ async function sendMsg() {
     const t = messageInput.value.trim();
     if ((!t && !chatPhoto) || !currentChatPartner) return;
     
+    // Очищаем typing
     clearTimeout(typingTimer);
     sendTypingWithRetry(false);
     
@@ -1403,6 +1433,8 @@ function addMessageToChat(msg) {
 }
 
 function showTypingIndicator(from, isTyping) {
+    console.log('🟣 showTypingIndicator:', from, isTyping, 'current:', currentChatPartner);
+    
     if (!currentChatPartner || String(currentChatPartner) !== String(from)) return;
     
     const chatMessagesEl = document.getElementById('chatMessages');
@@ -1416,11 +1448,13 @@ function showTypingIndicator(from, isTyping) {
             typingIndicatorEl.innerHTML = 'печатает<span class="typing-dots"><span></span><span></span><span></span></span>';
             chatMessagesEl.appendChild(typingIndicatorEl);
             chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+            console.log('🟣 Индикатор печатания добавлен');
         }
     } else {
         if (typingIndicatorEl) {
             typingIndicatorEl.remove();
             typingIndicatorEl = null;
+            console.log('🟣 Индикатор печатания убран');
         }
     }
 }
@@ -1441,14 +1475,21 @@ function updateOnlineStatusUI(userId, online) {
 
 // ===== TYPING =====
 function sendTypingWithRetry(isTyping, retries = 0) {
-    if (!wsConnected || !currentChatPartner) return;
+    console.log('📤 sendTypingWithRetry:', isTyping, 'wsConnected:', wsConnected, 'partner:', currentChatPartner);
+    
+    if (!wsConnected || !currentChatPartner) {
+        console.log('❌ Не отправляем typing: нет连接 или партнера');
+        return;
+    }
     
     try {
         ws.send(JSON.stringify({
             type: 'typing',
             payload: { to: currentChatPartner, isTyping }
         }));
+        console.log('✅ Typing отправлен:', isTyping);
     } catch (err) {
+        console.error('❌ Ошибка отправки typing:', err);
         if (retries < 3) {
             setTimeout(() => sendTypingWithRetry(isTyping, retries + 1), 200);
         }
