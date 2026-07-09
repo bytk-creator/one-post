@@ -8,9 +8,11 @@ const { createWebSocketServer, clients, broadcastOnlineStatus, setDb } = require
 
 const DATA_DIR = path.join(__dirname, 'data');
 const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
+const AUDIO_DIR = path.join(UPLOADS_DIR, 'audio');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
 const DB_PATH = path.join(DATA_DIR, 'database.db');
 
@@ -51,7 +53,6 @@ async function initDb() {
     db.run(`CREATE INDEX IF NOT EXISTS idx_messages_time ON messages(time DESC)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_likes_postId ON likes(postId)`);
     
-    // Передаём БД в WebSocket сервер
     try {
         setDb(db);
         console.log('✅ БД передана в WebSocket сервер');
@@ -80,7 +81,8 @@ function parseFormData(req) {
     return new Promise((resolve) => {
         const form = new formidable.IncomingForm({
             uploadDir: UPLOADS_DIR, keepExtensions: true,
-            maxFileSize: 10 * 1024 * 1024, allowEmptyFiles: false
+            maxFileSize: 25 * 1024 * 1024, // Увеличил до 25MB для аудио
+            allowEmptyFiles: false
         });
         form.parse(req, (err, fields, files) => {
             if (err) { 
@@ -125,7 +127,15 @@ function serveFile(res, filePath, contentType) {
 function serveBinaryFile(res, filePath) {
     const fullPath = path.join(__dirname, filePath);
     const ext = path.extname(fullPath).toLowerCase();
-    const mimeTypes = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' };
+    const mimeTypes = { 
+        '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', 
+        '.png': 'image/png', '.gif': 'image/gif', 
+        '.webp': 'image/webp',
+        '.webm': 'audio/webm',
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.ogg': 'audio/ogg'
+    };
     res.setHeader('Cache-Control', 'public, max-age=86400');
     fs.readFile(fullPath, (err, data) => {
         if (err) { res.writeHead(404); res.end('Not found'); return; }
@@ -174,8 +184,11 @@ function parseLastMsg(text) {
     if (!text) return '';
     try {
         const parsed = JSON.parse(text);
-        if (parsed && typeof parsed === 'object' && parsed.imageUrl) return '📷 Фото';
-        if (parsed && typeof parsed === 'object' && parsed.text) return parsed.text;
+        if (parsed && typeof parsed === 'object') {
+            if (parsed.audioUrl) return '🎤 Голосовое';
+            if (parsed.imageUrl) return '📷 Фото';
+            if (parsed.text) return parsed.text;
+        }
         return text;
     } catch (e) { return text; }
 }
@@ -186,14 +199,16 @@ function parseMsgText(text) {
         if (parsed && typeof parsed === 'object') { 
             return { 
                 text: parsed.text ? sanitizeText(parsed.text, 2000) : '', 
-                imageUrl: parsed.imageUrl || null, 
+                imageUrl: parsed.imageUrl || null,
+                audioUrl: parsed.audioUrl || null,
+                duration: parsed.duration || null,
                 replyTo: parsed.replyTo || null, 
                 replyToText: parsed.replyToText ? sanitizeText(parsed.replyToText, 100) : null 
             }; 
         }
-        return { text: sanitizeText(text, 2000), imageUrl: null, replyTo: null, replyToText: null };
+        return { text: sanitizeText(text, 2000), imageUrl: null, audioUrl: null, duration: null, replyTo: null, replyToText: null };
     } catch (e) { 
-        return { text: sanitizeText(text, 2000), imageUrl: null, replyTo: null, replyToText: null }; 
+        return { text: sanitizeText(text, 2000), imageUrl: null, audioUrl: null, duration: null, replyTo: null, replyToText: null }; 
     }
 }
 
@@ -447,7 +462,7 @@ const server = http.createServer(async (req, res) => {
         return serveJSON(res, dialogs);
     }
 
-    if (url.startsWith('/api/messages/') && url !== '/api/messages/photo' && method === 'GET') {
+    if (url.startsWith('/api/messages/') && url !== '/api/messages/photo' && url !== '/api/messages/audio' && method === 'GET') {
         if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
         const partnerId = url.split('/')[3];
         const params = new URL(req.url, 'http://localhost').searchParams;
@@ -480,7 +495,9 @@ const server = http.createServer(async (req, res) => {
                 fromUserId: String(m.fromUserId), 
                 toUserId: String(m.toUserId), 
                 text: parsed.text, 
-                imageUrl: parsed.imageUrl, 
+                imageUrl: parsed.imageUrl,
+                audioUrl: parsed.audioUrl,
+                duration: parsed.duration,
                 replyTo: parsed.replyTo, 
                 replyToText: parsed.replyToText, 
                 time: m.time, 
@@ -503,6 +520,71 @@ const server = http.createServer(async (req, res) => {
             return { id: String(m.id), from: String(m.fromUserId), text: parsed.text, fromUsername: m.fromUsername, time: m.time };
         });
         return serveJSON(res, fixed);
+    }
+
+    // ===== ОБРАБОТКА АУДИО =====
+    if (url === '/api/messages/audio' && method === 'POST') {
+        if (!currentUser) return serveJSON(res, { error: 'Не авторизован' }, 401);
+        const result = await parseFormData(req);
+        if (result.error) return serveJSON(res, { error: 'Ошибка загрузки аудио: ' + result.error }, 400);
+        
+        const { fields, files } = result;
+        const to = fields.to;
+        const duration = parseInt(fields.duration) || 0;
+        
+        if (!to) return serveJSON(res, { error: 'Получатель обязателен' }, 400);
+        
+        const targetUser = queryOne('SELECT id FROM users WHERE id = ?', [String(to)]);
+        if (!targetUser) return serveJSON(res, { error: 'Пользователь не найден' }, 404);
+        
+        if (String(to) === String(currentUser.id)) return serveJSON(res, { error: 'Нельзя себе' }, 400);
+        
+        let audioUrl = null;
+        if (files.audio && files.audio[0]) {
+            const file = files.audio[0];
+            const allowedTypes = ['audio/webm', 'audio/mpeg', 'audio/wav', 'audio/ogg'];
+            if (!allowedTypes.includes(file.mimetype)) {
+                return serveJSON(res, { error: 'Неподдерживаемый формат аудио' }, 400);
+            }
+            const ext = path.extname(file.originalFilename || '.webm');
+            const fileName = 'audio-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex') + ext;
+            const audioPath = path.join(AUDIO_DIR, fileName);
+            fs.renameSync(file.filepath, audioPath);
+            audioUrl = '/uploads/audio/' + fileName;
+        }
+        
+        if (!audioUrl) return serveJSON(res, { error: 'Аудио не загружено' }, 400);
+        
+        const msgId = Date.now().toString();
+        const storedText = JSON.stringify({ 
+            text: '🎤 Голосовое сообщение', 
+            audioUrl, 
+            duration,
+            imageUrl: null,
+            replyTo: null, 
+            replyToText: null 
+        });
+        runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, String(to), storedText, new Date().toISOString()]);
+        
+        sendMessageViaWS(to, {
+            type: 'new_message',
+            payload: {
+                id: msgId,
+                from: String(currentUser.id),
+                to: String(to),
+                text: '🎤 Голосовое сообщение',
+                audioUrl: audioUrl,
+                duration: duration,
+                imageUrl: null,
+                replyTo: null,
+                replyToText: null,
+                time: new Date().toISOString(),
+                read: 0,
+                fromUsername: currentUser.username
+            }
+        });
+        
+        return serveJSON(res, { success: true, message: { id: msgId, from: String(currentUser.id), to: String(to), audioUrl, duration, fromUsername: currentUser.username } });
     }
 
     if (url === '/api/messages/photo' && method === 'POST') {
@@ -548,6 +630,8 @@ const server = http.createServer(async (req, res) => {
                 to: String(to),
                 text: sanitizedText || '',
                 imageUrl: imageUrl,
+                audioUrl: null,
+                duration: null,
                 replyTo: replyTo || null,
                 replyToText: replyToText || null,
                 time: new Date().toISOString(),
@@ -572,7 +656,7 @@ const server = http.createServer(async (req, res) => {
         const msgId = Date.now().toString();
         const sanitizedText = sanitizeText(text, 2000);
         const sanitizedReplyText = replyToText ? sanitizeText(replyToText, 100) : null;
-        const storedText = JSON.stringify({ text: sanitizedText, imageUrl: null, replyTo: replyTo || null, replyToText: sanitizedReplyText });
+        const storedText = JSON.stringify({ text: sanitizedText, imageUrl: null, audioUrl: null, duration: null, replyTo: replyTo || null, replyToText: sanitizedReplyText });
         runSql('INSERT INTO messages (id, fromUserId, toUserId, text, time, read) VALUES (?, ?, ?, ?, ?, 0)', [msgId, currentUser.id, String(to), storedText, new Date().toISOString()]);
         
         sendMessageViaWS(to, {
@@ -582,6 +666,9 @@ const server = http.createServer(async (req, res) => {
                 from: String(currentUser.id),
                 to: String(to),
                 text: sanitizedText,
+                imageUrl: null,
+                audioUrl: null,
+                duration: null,
                 replyTo: replyTo || null,
                 replyToText: sanitizedReplyText || null,
                 time: new Date().toISOString(),
@@ -628,7 +715,6 @@ initDb().then(() => {
     const PORT = process.env.PORT || 3000;
     server.listen(PORT, '0.0.0.0', () => {
         console.log('🚀 Сервер запущен на порту ' + PORT);
-        // Создаём WebSocket на том же порту
         createWebSocketServer(server);
         console.log('✅ WebSocket сервер интегрирован на порту ' + PORT);
     });
