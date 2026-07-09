@@ -74,7 +74,6 @@ const avatarInput = document.getElementById('avatarInput');
 const coverInput = document.getElementById('coverInput');
 const settingsSuccess = document.getElementById('settingsSuccess');
 const saveProfile = document.getElementById('saveProfile');
-const savePassword = document.getElementById('savePassword');
 const themeToggle = document.getElementById('themeToggle');
 const logoutBtnMobile = document.getElementById('logoutBtnMobile');
 const logoutBtnDesktop = document.getElementById('logoutBtnDesktop');
@@ -380,15 +379,23 @@ coverInput?.addEventListener('change', async () => {
 saveProfile.addEventListener('click', async () => {
     const u = settingsUsername.value.trim();
     const b = settingsBio.value.trim();
+    const p = settingsPassword.value.trim();
+    
     if (!/^[a-zA-Z0-9_]+$/.test(u)) return alert('OneID: только английские буквы, цифры и _');
     if (u.length < 3) return alert('OneID от 3 символов');
+    
     try {
-        const d = await apiCall('/api/settings', 'POST', { username: u, bio: b });
+        const body = { username: u, bio: b };
+        if (p) {
+            if (p.length < 4) return alert('Пароль от 4 символов');
+            body.password = p;
+        }
+        const d = await apiCall('/api/settings', 'POST', body);
         currentUser = d.user; currentUser.id = String(currentUser.id);
         updateAllUI(); showOk('Сохранено!');
+        if (p) settingsPassword.value = '';
     } catch (err) { alert(err.message); }
 });
-savePassword.addEventListener('click', async () => { const p = settingsPassword.value.trim(); if (!p) return alert('Введите пароль'); if (p.length < 4) return alert('От 4 символов'); try { await apiCall('/api/settings', 'POST', { password: p }); settingsPassword.value = ''; showOk('Пароль изменён!'); } catch (err) { alert(err.message); } });
 function showOk(m) { settingsSuccess.textContent = '✅ ' + m; settingsSuccess.classList.remove('hidden'); setTimeout(() => settingsSuccess.classList.add('hidden'), 3000); }
 
 async function updateUnreadBadge() {
