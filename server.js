@@ -81,7 +81,7 @@ function parseFormData(req) {
     return new Promise((resolve) => {
         const form = new formidable.IncomingForm({
             uploadDir: UPLOADS_DIR, keepExtensions: true,
-            maxFileSize: 25 * 1024 * 1024, // Увеличил до 25MB для аудио
+            maxFileSize: 25 * 1024 * 1024,
             allowEmptyFiles: false
         });
         form.parse(req, (err, fields, files) => {
