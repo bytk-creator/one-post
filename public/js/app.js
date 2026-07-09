@@ -179,17 +179,26 @@ async function apiCall(url, method, body = null) {
     
     try {
         const r = await fetch(url, o);
+        const contentType = r.headers.get('content-type') || '';
+        
+        if (!contentType.includes('application/json')) {
+            const text = await r.text();
+            console.error('❌ Сервер вернул не JSON:', text.substring(0, 200));
+            throw new Error('Ошибка сервера. Попробуйте позже.');
+        }
+        
         const d = await r.json();
         
         if (!r.ok) {
-            if (r.status === 401) {
-                console.log('🔒 Требуется авторизация');
-            }
             throw new Error(d.error || 'Ошибка сервера');
         }
         
         return d;
     } catch (err) {
+        if (err instanceof SyntaxError) {
+            console.error('❌ Ошибка парсинга JSON');
+            throw new Error('Сервер временно недоступен');
+        }
         throw err;
     }
 }
@@ -279,7 +288,18 @@ function enterApp(user) {
 
 async function startApp() {
     try {
+        if (!token) {
+            console.log('⚠️ Нет токена');
+            return;
+        }
+        
         const d = await apiCall('/api/me', 'GET');
+        
+        if (!d || !d.user) {
+            console.error('❌ Некорректный ответ от /api/me');
+            return;
+        }
+        
         currentUser = d.user; 
         currentUser.id = String(currentUser.id); 
         canPostToday = d.canPost;
@@ -297,8 +317,6 @@ async function startApp() {
         console.log('✅ Приложение запущено');
     } catch (err) {
         console.error('❌ Ошибка запуска:', err.message);
-        // НЕ выходим из приложения при ошибке /api/me
-        // Просто продолжаем работу с теми данными что есть
     }
 }
 
@@ -823,7 +841,6 @@ async function loadDialogs() {
     } catch (err) {} 
 }
 
-// Поиск пользователей
 let st; 
 searchUserInput.addEventListener('input', () => { 
     clearTimeout(st); 
@@ -1409,11 +1426,6 @@ function showTypingIndicator(from, isTyping) {
 }
 
 function updateOnlineStatusUI(userId, online) {
-    const dialogItems = document.querySelectorAll('.dialog-item');
-    dialogItems.forEach(item => {
-        // Можно добавить обновление онлайн-статуса в списке диалогов
-    });
-    
     if (currentChatPartner && String(currentChatPartner) === String(userId)) {
         const partnerInfo = document.querySelector('.chat-partner-info');
         if (partnerInfo) {
@@ -1632,6 +1644,13 @@ async function sendVoiceMessage(blob) {
             body: formData
         });
         
+        const contentType = r.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            const text = await r.text();
+            console.error('❌ Сервер вернул не JSON:', text.substring(0, 200));
+            throw new Error('Ошибка сервера');
+        }
+        
         const data = await r.json();
         
         if (!r.ok) {
@@ -1668,6 +1687,9 @@ document.addEventListener('DOMContentLoaded', function() {
         token = t;
         apiCall('/api/me', 'GET')
             .then(d => {
+                if (!d || !d.user) {
+                    throw new Error('Некорректный ответ');
+                }
                 currentUser = d.user;
                 currentUser.id = String(currentUser.id);
                 canPostToday = d.canPost;
