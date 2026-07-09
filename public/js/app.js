@@ -445,13 +445,12 @@ async function loadMessages(before = null, prepend = false) {
         else { chatMessages.appendChild(frag); chatMessages.scrollTop = chatMessages.scrollHeight; }
         updateUnreadBadge();
         
-        if (msgs.length && !prepend) {
-            const last = msgs[msgs.length-1];
-            const isIncoming = String(last.from) !== String(currentUser?.id);
-            const isNew = !last.read && (new Date() - new Date(last.time)) < 10000;
-            if (isIncoming && isNew && document.visibilityState === 'visible') {
-                showNotification(last.fromUsername || 'Сообщение', last.text?.substring(0, 60) || '📷 Фото', 'message');
+        if (msgs.length && !prepend && !before && document.visibilityState === 'visible') {
+    const lastIncoming = [...msgs].reverse().find(m => String(m.from) !== String(currentUser?.id));
+    if (lastIncoming && (new Date() - new Date(lastIncoming.time)) < 15000) {
+        showNotification(lastIncoming.fromUsername || 'Сообщение', lastIncoming.text?.substring(0, 60) || '📷 Фото', 'message');
     }
+}
 }
     } catch (err) {}
     messagesLoading = false;
