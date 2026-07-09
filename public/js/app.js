@@ -306,7 +306,17 @@ function goToFeed() { sidebarBtns.forEach(b => b.classList.remove('active')); do
 async function loadSettings() { try { const d = await apiCall('/api/settings', 'GET'); settingsUsername.value = d.username; settingsBio.value = d.bio || ''; updateSA(d.avatarUrl, d.username); } catch (err) {} }
 function updateSA(url, name) { if (url) settingsAvatarContainer.innerHTML = `<img src="${url}" class="settings-avatar-img" alt="Аватар">`; else settingsAvatarContainer.innerHTML = `<div class="settings-avatar-placeholder">${name.charAt(0).toUpperCase()}</div>`; }
 avatarInput.addEventListener('change', async () => { const f = avatarInput.files[0]; if (!f) return; const fd = new FormData(); fd.append('avatar', f); try { const r = await fetch('/api/settings', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd }); const d = await r.json(); if (!r.ok) throw new Error(d.error); currentUser.avatarUrl = d.avatarUrl; updateSA(d.avatarUrl, currentUser.username); updateAllUI(); showOk('Аватар обновлён!'); } catch (err) { alert(err.message); } });
-saveProfile.addEventListener('click', async () => { const u = settingsUsername.value.trim(); const b = settingsBio.value.trim(); if (u.length < 3) return alert('Имя от 3 символов'); try { const d = await apiCall('/api/settings', 'POST', { username: u, bio: b }); currentUser = d.user; currentUser.id = String(currentUser.id); updateAllUI(); showOk('Сохранено!'); } catch (err) { alert(err.message); } });
+saveProfile.addEventListener('click', async () => {
+    const u = settingsUsername.value.trim();
+    const b = settingsBio.value.trim();
+    if (!/^[a-zA-Z0-9_]+$/.test(u)) return alert('OneID: только английские буквы, цифры и _');
+    if (u.length < 3) return alert('OneID от 3 символов');
+    try {
+        const d = await apiCall('/api/settings', 'POST', { username: u, bio: b });
+        currentUser = d.user; currentUser.id = String(currentUser.id);
+        updateAllUI(); showOk('Сохранено!');
+    } catch (err) { alert(err.message); }
+});
 savePassword.addEventListener('click', async () => { const p = settingsPassword.value.trim(); if (!p) return alert('Введите пароль'); if (p.length < 4) return alert('От 4 символов'); try { await apiCall('/api/settings', 'POST', { password: p }); settingsPassword.value = ''; showOk('Пароль изменён!'); } catch (err) { alert(err.message); } });
 function showOk(m) { settingsSuccess.textContent = '✅ ' + m; settingsSuccess.classList.remove('hidden'); setTimeout(() => settingsSuccess.classList.add('hidden'), 3000); }
 
