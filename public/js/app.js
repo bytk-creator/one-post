@@ -210,13 +210,9 @@ function updateCreatePostUI() {
 
 sidebarBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-        sidebarBtns.forEach(b => b.classList.remove('active')); btn.classList.add('active');
-        feedPageEl.classList.add('hidden'); profilePage.classList.add('hidden'); messagesPage.classList.add('hidden'); settingsPage.classList.add('hidden');
         const page = btn.dataset.page;
-        if (page === 'feed') feedPageEl.classList.remove('hidden');
-        else if (page === 'messages') { messagesPage.classList.remove('hidden'); loadDialogs(); }
-        else if (page === 'settings') { settingsPage.classList.remove('hidden'); loadSettings(); }
-        dialogsSidebar.classList.remove('chat-open'); messagesLayout.classList.remove('mobile-view');
+        history.pushState({ page }, '', page === 'feed' ? '/' : '/' + page);
+        navigateFromURL(page);
     });
 });
 
