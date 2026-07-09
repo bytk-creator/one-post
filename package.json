@@ -1,13 +1,14 @@
 {
   "name": "one-post",
   "version": "1.0.0",
-  "description": "Соцсеть с одним постом в день",
-  "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "ws": "node ws-server.js",
+    "dev": "node server.js & node ws-server.js"
   },
   "dependencies": {
-    "sql.js": "^1.12.0",
-    "formidable": "^3.5.1"
+    "formidable": "^2.1.1",
+    "sql.js": "^1.8.0",
+    "ws": "^8.14.2"
   }
 }
