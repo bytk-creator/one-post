@@ -167,11 +167,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .profile-cover { width: 100%; height: 200px; overflow: hidden; background: var(--avatar-gradient); }
 .profile-cover img { width: 100%; height: 100%; object-fit: cover; }
 .profile-avatar-section { margin-top: -44px; position: relative; z-index: 2; display: flex; justify-content: center; }
-.profile-avatar-section .profile-avatar-wrapper,
+.profile-avatar-section .profile-avatar-wrapper { border: 3px solid var(--card); box-shadow: var(--shadow-md); border-radius: 50%; }
 .profile-avatar-section .profile-avatar-placeholder { border: 3px solid var(--card); box-shadow: var(--shadow-md); }
-.profile-avatar-wrapper { position: relative; width: 88px; height: 88px; margin: 0 auto 16px; }
-.profile-avatar-wrapper img { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; border: 3px solid var(--card); box-shadow: var(--shadow-md); }
-.profile-avatar-placeholder { width: 88px; height: 88px; border-radius: 50%; background: var(--avatar-gradient); color: white; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 700; margin: 0 auto 16px; box-shadow: 0 4px 16px rgba(79,110,247,0.35); }
+.profile-avatar-wrapper { position: relative; width: 88px; height: 88px; margin: 0 auto; border-radius: 50%; overflow: hidden; }
+.profile-avatar-wrapper img { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; }
+.profile-avatar-placeholder { width: 88px; height: 88px; border-radius: 50%; background: var(--avatar-gradient); color: white; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 700; margin: 0 auto; box-shadow: 0 4px 16px rgba(79,110,247,0.35); }
 .profile-name { font-size: 22px; font-weight: 800; margin-bottom: 6px; letter-spacing: -0.3px; }
 .profile-bio { color: var(--text-secondary); font-size: 15px; margin: 10px 0 20px; line-height: 1.6; max-width: 340px; margin-left: auto; margin-right: auto; }
 .profile-date { color: var(--text-tertiary); font-size: 13px; margin-bottom: 22px; }
