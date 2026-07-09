@@ -51,6 +51,7 @@ const messagesLayout = document.getElementById('messagesLayout');
 const dialogsSidebar = document.getElementById('dialogsSidebar');
 const dialogsList = document.getElementById('dialogsList');
 const chatBackBtn = document.getElementById('chatBackBtn');
+const chatCloseBtn = document.getElementById('chatCloseBtn');
 const chatPartnerText = document.getElementById('chatPartnerText');
 const chatMessages = document.getElementById('chatMessages');
 const messageInput = document.getElementById('messageInput');
@@ -403,10 +404,26 @@ function openChat(uid, un, avUrl) {
     
     messageInput.disabled = false;
     if (!chatPhoto && !messageInput.value.trim()) sendMessageBtn.disabled = true;
+    if (chatCloseBtn) chatCloseBtn.style.display = 'flex';
     loadMessages(); loadDialogs();
     if (innerWidth <= 768) { dialogsSidebar.classList.add('chat-open'); messagesLayout.classList.add('mobile-view'); }
 }
-chatBackBtn.addEventListener('click', () => { dialogsSidebar.classList.remove('chat-open'); messagesLayout.classList.remove('mobile-view'); currentChatPartner = null; lastMessagesHash = ''; chatPartnerText.textContent = 'Выберите диалог'; messageInput.disabled = true; sendMessageBtn.disabled = true; chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог или найдите пользователя</div>'; });
+
+function closeChat() {
+    dialogsSidebar.classList.remove('chat-open');
+    messagesLayout.classList.remove('mobile-view');
+    currentChatPartner = null;
+    lastMessagesHash = '';
+    chatPartnerText.textContent = 'Выберите диалог';
+    messageInput.disabled = true;
+    sendMessageBtn.disabled = true;
+    chatMessages.innerHTML = '<div class="chat-empty">Выберите диалог или найдите пользователя</div>';
+    if (chatCloseBtn) chatCloseBtn.style.display = 'none';
+}
+
+chatBackBtn.addEventListener('click', closeChat);
+chatCloseBtn?.addEventListener('click', closeChat);
+
 messageInput.addEventListener('input', () => { sendMessageBtn.disabled = !(messageInput.value.trim() || chatPhoto); });
 async function loadMessages(before = null, prepend = false) {
     if (!currentChatPartner) return;
@@ -440,7 +457,6 @@ async function loadMessages(before = null, prepend = false) {
             inner += (m.text ? esc(m.text) : '');
             inner += (m.imageUrl ? `<img src="${m.imageUrl}" class="message-image" alt="Фото" loading="lazy">` : '');
             
-            // Статус прочтения — галочки как в WhatsApp
             let checkmark = '';
             if (String(m.from) === String(currentUser.id)) {
                 if (m.read) {
