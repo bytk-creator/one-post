@@ -129,15 +129,21 @@ document.getElementById('registerFormEl').addEventListener('submit', async (e) =
     e.preventDefault();
     const u = document.getElementById('regUsername').value.trim();
     const p = document.getElementById('regPassword').value;
+    const captcha = parseInt(document.getElementById('captchaAnswer').value);
     document.getElementById('registerError').textContent = '';
     
-    // Валидация OneID
     if (!/^[a-zA-Z0-9_]+$/.test(u)) {
         document.getElementById('registerError').textContent = 'OneID: только английские буквы, цифры и _';
         return;
     }
     if (u.length < 3) {
         document.getElementById('registerError').textContent = 'OneID минимум 3 символа';
+        return;
+    }
+    if (captcha !== captchaAnswer) {
+        document.getElementById('registerError').textContent = 'Неверный ответ на вопрос';
+        generateCaptcha();
+        document.getElementById('captchaAnswer').value = '';
         return;
     }
     
