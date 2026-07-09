@@ -274,7 +274,7 @@ async function loadFeed(append = false) {
             const del = (currentUser && String(post.userId) === String(currentUser.id)) ? `<button class="post-delete-btn"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6h14M10 11v6m4-6v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : '';
             div.innerHTML = `<div class="post-header"><div class="post-avatar" data-userid="${post.userId}">${av}</div><div class="post-author-info"><div class="post-author" data-userid="${post.userId}">${esc(post.author)}</div><div class="post-time">${ts}</div></div><div class="post-header-right">${del}</div></div><div class="post-body"><div class="post-text">${esc(post.content)}</div>${post.imageUrl ? `<img src="${post.imageUrl}" class="post-image" alt="Фото" loading="lazy">` : ''}</div><div class="post-footer"><button class="like-btn ${li.liked ? 'liked' : ''}"><span class="like-icon">${li.liked ? '❤️' : '🤍'}</span><span class="like-count">${li.count > 0 ? li.count : ''}</span></button></div>`;
             div.querySelectorAll('[data-userid]').forEach(el => el.addEventListener('click', (e) => { if (!e.target.closest('.like-btn') && !e.target.closest('.post-delete-btn')) viewProfile(post.userId); }));
-            div.querySelector('.like-btn').addEventListener('click', async function() { try { const r = await apiCall('/api/like', 'POST', { postId: post.id }); const ic = this.querySelector('.like-icon'); const ct = this.querySelector('.like-count'); if (r.liked) { this.classList.add('liked', 'just-liked'); ic.textContent = '❤️'; setTimeout(() => this.classList.remove('just-liked'), 400); } else { this.classList.remove('liked'); ic.textContent = '🤍'; } ct.textContent = r.count > 0 ? r.count : ''; if (r.liked) showNotification('Лайк', 'Вы поставили ❤️', 'like'); } catch (err) {} });
+            div.querySelector('.like-btn').addEventListener('click', async function() { try { const r = await apiCall('/api/like', 'POST', { postId: post.id }); const ic = this.querySelector('.like-icon'); const ct = this.querySelector('.like-count'); if (r.liked) { this.classList.add('liked', 'just-liked'); ic.textContent = '❤️'; setTimeout(() => this.classList.remove('just-liked'), 400); } else { this.classList.remove('liked'); ic.textContent = '🤍'; } ct.textContent = r.count > 0 ? r.count : ''; } catch (err) {} });
             const db = div.querySelector('.post-delete-btn'); if (db) db.addEventListener('click', async () => { if (confirm('Удалить?')) { try { await apiCall('/api/post/' + post.id, 'DELETE'); feedPage = 1; feedHasMore = true; loadFeed(); } catch (err) { alert(err.message); } } });
             feedContainer.appendChild(div);
         });
@@ -347,7 +347,7 @@ saveProfile.addEventListener('click', async () => {
         updateAllUI(); showOk('Сохранено!');
     } catch (err) { alert(err.message); }
 });
-savePassword.addEventListener('click', async () => { const p = settingsPassword.value.trim(); if (!p) return alert('Введите пароль'); if (p.length < 4) return alert('От 4 символов'); try { await apiCall('/api/settings', 'POST', { password: p }); settingsPassword.value = ''; showOk('Пароль изменён!'); showNotification('Настройки', 'Пароль успешно изменён', 'system'); } catch (err) { alert(err.message); } });
+savePassword.addEventListener('click', async () => { const p = settingsPassword.value.trim(); if (!p) return alert('Введите пароль'); if (p.length < 4) return alert('От 4 символов'); try { await apiCall('/api/settings', 'POST', { password: p }); settingsPassword.value = ''; showOk('Пароль изменён!'); } catch (err) { alert(err.message); } });
 function showOk(m) { settingsSuccess.textContent = '✅ ' + m; settingsSuccess.classList.remove('hidden'); setTimeout(() => settingsSuccess.classList.add('hidden'), 3000); }
 
 async function updateUnreadBadge() { try { const d = await apiCall('/api/unread', 'GET'); msgBadge.classList.toggle('hidden', !d.count); if (d.count) msgBadge.textContent = d.count; } catch (err) {} }
@@ -445,13 +445,12 @@ async function loadMessages(before = null, prepend = false) {
         else { chatMessages.appendChild(frag); chatMessages.scrollTop = chatMessages.scrollHeight; }
         updateUnreadBadge();
         
-        if (msgs.length && !prepend && !before && document.visibilityState === 'visible') {
-    const lastIncoming = [...msgs].reverse().find(m => String(m.from) !== String(currentUser?.id));
-    if (lastIncoming && (new Date() - new Date(lastIncoming.time)) < 15000) {
-        showNotification(lastIncoming.fromUsername || 'Сообщение', lastIncoming.text?.substring(0, 60) || '📷 Фото', 'message');
-    }
-}
-}
+        if (msgs.length && !prepend && String(msgs[msgs.length-1].from) !== String(currentUser?.id)) {
+            const last = msgs[msgs.length-1];
+            if ((new Date() - new Date(last.time)) < 15000) {
+                showNotification(last.fromUsername || 'Сообщение', last.text?.substring(0, 60) || '📷 Фото', 'message');
+            }
+        }
     } catch (err) {}
     messagesLoading = false;
 }
