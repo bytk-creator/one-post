@@ -356,12 +356,9 @@ setInterval(() => { if (!messagesPage.classList.contains('hidden')) loadDialogs(
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
 // ========== РОУТИНГ ==========
-window.addEventListener('popstate', () => {
-    const path = location.pathname.replace('/', '') || 'feed';
-    navigateFromURL(path);
-});
-
 function navigateFromURL(page) {
+    if (page === 'profile') page = 'feed';
+    
     sidebarBtns.forEach(b => b.classList.remove('active'));
     const btn = document.querySelector(`[data-page="${page}"]`);
     if (btn) btn.classList.add('active');
@@ -378,6 +375,11 @@ function navigateFromURL(page) {
     dialogsSidebar.classList.remove('chat-open');
     messagesLayout.classList.remove('mobile-view');
 }
+
+window.addEventListener('popstate', () => {
+    const path = location.pathname.replace('/', '') || 'feed';
+    navigateFromURL(path);
+});
 
 (function() {
     const t = localStorage.getItem('token');
