@@ -62,7 +62,7 @@ const chatCloseBtn = document.getElementById('chatCloseBtn');
 const chatPartnerText = document.getElementById('chatPartnerText');
 const chatMessages = document.getElementById('chatMessages');
 const messageInput = document.getElementById('messageInput');
-const sendMessageBtn = document.getElementById('sendMessageBtn');
+let sendMessageBtn = document.getElementById('sendMessageBtn');
 const searchUserInput = document.getElementById('searchUserInput');
 const searchResults = document.getElementById('searchResults');
 const chatAttachBtn = document.getElementById('chatAttachBtn');
@@ -219,7 +219,7 @@ async function startApp() {
         apiCall('/api/ping', 'POST').catch(() => {});
         
         setTimeout(() => connectWebSocket(), 1000);
-        setTimeout(initTelegramStyleButton, 1500);
+        setTimeout(initTelegramButton, 1500);
     } catch (err) { logout(); }
 }
 
@@ -457,7 +457,6 @@ function openChat(uid, un, avUrl) {
     loadMessages(); loadDialogs();
     if (innerWidth <= 768) { dialogsSidebar.classList.add('chat-open'); messagesLayout.classList.add('mobile-view'); }
     
-    // ===== ДОБАВЛЯЕМ ОБРАБОТЧИК TYPING =====
     setTimeout(() => {
         const input = document.getElementById('messageInput');
         if (input && !input._typingHandler) {
@@ -482,8 +481,7 @@ function openChat(uid, un, avUrl) {
         }
     }, 100);
     
-    // ===== ИНИЦИАЛИЗАЦИЯ КНОПКИ =====
-    setTimeout(initTelegramStyleButton, 200);
+    setTimeout(initTelegramButton, 200);
 }
 
 function closeChat() {
@@ -509,7 +507,6 @@ chatCloseBtn?.addEventListener('click', closeChat);
 
 messageInput.addEventListener('input', () => { 
     sendMessageBtn.disabled = !(messageInput.value.trim() || chatPhoto);
-    updateSendButtonUI();
 });
 
 async function loadMessages(before = null, prepend = false) {
@@ -638,86 +635,154 @@ async function sendMsg() {
         lastMessagesHash = '';
         loadMessages();
         loadDialogs();
-        updateSendButtonUI();
     } catch (err) { alert(err.message); }
 }
-sendMessageBtn.addEventListener('click', function(e) {
-    // Обработка через Telegram-стиль
-});
-messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMsg(); });
-chatAttachBtn.addEventListener('click', () => { chatPhotoInput.click(); });
-chatPhotoInput.addEventListener('change', () => { const f = chatPhotoInput.files[0]; if (!f) return; chatPhoto = f; const r = new FileReader(); r.onload = (e) => { chatPhotoPreviewImg.src = e.target.result; chatPhotoPreview.classList.remove('hidden'); sendMessageBtn.disabled = false; }; r.readAsDataURL(f); });
-chatRemovePhoto.addEventListener('click', () => { chatPhoto = null; chatPhotoInput.value = ''; chatPhotoPreview.classList.add('hidden'); sendMessageBtn.disabled = !messageInput.value.trim(); });
-replyPreviewClose.addEventListener('click', () => { replyTo = null; replyPreview.classList.add('hidden'); });
-setInterval(() => { if (currentChatPartner && !messagesPage.classList.contains('hidden') && chatMessages.scrollTop > chatMessages.scrollHeight - chatMessages.clientHeight - 200) loadMessages(); }, 3000);
-setInterval(() => { if (!messagesPage.classList.contains('hidden')) loadDialogs(); }, 5000);
 
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
-function showNotification(title, text, type = 'system') {
-    let container = document.querySelector('.notification-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.className = 'notification-container';
-        document.body.appendChild(container);
-    }
+// ===== ОБРАБОТЧИК ДЛЯ КНОПКИ ОТПРАВКИ =====
+function setupSendButton() {
+    const btn = document.getElementById('sendMessageBtn');
+    if (!btn) return;
     
-    const icons = { like: '❤️', message: '💬', system: '✅' };
+    // Удаляем старые обработчики
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    sendMessageBtn = newBtn;
     
-    const notif = document.createElement('div');
-    notif.className = 'notification';
-    notif.innerHTML = `
-        <div class="notif-icon ${type}">${icons[type] || '🔔'}</div>
-        <div class="notif-body">
-            <div class="notif-title">${esc(title)}</div>
-            <div class="notif-text">${esc(text)}</div>
-        </div>
-        <button class="notif-close">✕</button>
-    `;
-    
-    notif.querySelector('.notif-close').addEventListener('click', () => {
-        notif.classList.add('removing');
-        setTimeout(() => notif.remove(), 300);
+    // Обработчик клика
+    newBtn.addEventListener('click', function(e) {
+        const input = document.getElementById('messageInput');
+        const hasText = input && input.value.trim().length > 0;
+        
+        if (hasText) {
+            if (typeof sendMsg === 'function') {
+                sendMsg();
+            }
+        } else {
+            console.log('🎙 Пусто');
+        }
     });
     
-    container.appendChild(notif);
-    
-    setTimeout(() => {
-        if (notif.parentNode) {
-            notif.classList.add('removing');
-            setTimeout(() => notif.remove(), 300);
+    // Обновление UI
+    function updateButtonUI() {
+        const input = document.getElementById('messageInput');
+        const hasText = input && input.value.trim().length > 0;
+        
+        if (hasText) {
+            newBtn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+            newBtn.className = 'send-btn send-btn-text';
+            newBtn.title = 'Отправить сообщение';
+            newBtn.disabled = false;
+        } else {
+            newBtn.innerHTML = '🎙';
+            newBtn.className = 'send-btn send-btn-voice';
+            newBtn.title = 'Удерживайте для записи голосового';
+            newBtn.disabled = false;
         }
-    }, 5000);
+    }
     
-    const all = container.querySelectorAll('.notification');
-    if (all.length > 3) {
-        all[0].classList.add('removing');
-        setTimeout(() => all[0].remove(), 300);
+    const input = document.getElementById('messageInput');
+    if (input) {
+        input.addEventListener('input', updateButtonUI);
+        input.addEventListener('focus', updateButtonUI);
+        input.addEventListener('blur', updateButtonUI);
+    }
+    
+    setTimeout(updateButtonUI, 100);
+}
+
+// ===== ФУНКЦИЯ ДЛЯ TELEGRAM-СТИЛЯ (ПРОСТАЯ ВЕРСИЯ) =====
+function initTelegramButton() {
+    console.log('🎙 Настройка кнопки...');
+    setupSendButton();
+}
+
+// ===== АУДИО-ПЛЕЕР =====
+function createAudioPlayerHTML(audioUrl, duration) {
+    return `
+        <div class="audio-message">
+            <button class="audio-play-btn" data-playing="false">▶</button>
+            <div class="audio-progress">
+                <div class="audio-progress-bar" style="width:0%"></div>
+            </div>
+            <span class="audio-time">${formatDuration(duration)}</span>
+        </div>
+    `;
+}
+
+function initAudioPlayer(playBtn, progressBar, timeDisplay, audioUrl, duration) {
+    let audio = null;
+    let isPlaying = false;
+    let progressInterval = null;
+    
+    playBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        
+        if (!audio) {
+            audio = new Audio(audioUrl);
+            audio.addEventListener('ended', function() {
+                stopPlayback();
+            });
+            audio.addEventListener('timeupdate', function() {
+                if (audio.duration) {
+                    const percent = (audio.currentTime / audio.duration) * 100;
+                    progressBar.style.width = Math.min(percent, 100) + '%';
+                    const remaining = Math.max(0, audio.duration - audio.currentTime);
+                    timeDisplay.textContent = formatDuration(Math.round(remaining));
+                }
+            });
+            audio.addEventListener('error', function(e) {
+                console.error('❌ Ошибка аудио:', e);
+                stopPlayback();
+            });
+        }
+        
+        if (isPlaying) {
+            stopPlayback();
+        } else {
+            startPlayback();
+        }
+    });
+    
+    function startPlayback() {
+        if (!audio) return;
+        audio.play().catch(function(err) {
+            console.error('❌ Ошибка воспроизведения:', err);
+        });
+        isPlaying = true;
+        playBtn.textContent = '⏸';
+        playBtn.dataset.playing = 'true';
+        
+        progressInterval = setInterval(function() {
+            if (audio.duration) {
+                const remaining = Math.max(0, audio.duration - audio.currentTime);
+                timeDisplay.textContent = formatDuration(Math.round(remaining));
+            }
+        }, 200);
+    }
+    
+    function stopPlayback() {
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+        }
+        isPlaying = false;
+        playBtn.textContent = '▶';
+        playBtn.dataset.playing = 'false';
+        progressBar.style.width = '0%';
+        timeDisplay.textContent = formatDuration(duration || 0);
+        if (progressInterval) {
+            clearInterval(progressInterval);
+            progressInterval = null;
+        }
     }
 }
 
-function navigateFromURL(page) {
-    sidebarBtns.forEach(b => b.classList.remove('active'));
-    const btn = document.querySelector(`[data-page="${page}"]`);
-    if (btn) btn.classList.add('active');
-    
-    feedPageEl.classList.add('hidden');
-    profilePage.classList.add('hidden');
-    messagesPage.classList.add('hidden');
-    settingsPage.classList.add('hidden');
-    
-    if (page === 'feed') { feedPageEl.classList.remove('hidden'); loadFeed(); }
-    else if (page === 'messages') { messagesPage.classList.remove('hidden'); loadDialogs(); }
-    else if (page === 'settings') { settingsPage.classList.remove('hidden'); loadSettings(); }
-    
-    dialogsSidebar.classList.remove('chat-open');
-    messagesLayout.classList.remove('mobile-view');
+function formatDuration(seconds) {
+    if (!seconds || seconds < 0) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return mins + ':' + String(secs).padStart(2, '0');
 }
-
-window.addEventListener('popstate', () => {
-    const path = location.pathname.replace('/', '') || 'feed';
-    navigateFromURL(path);
-});
 
 // ===== WEBSOCKET ФУНКЦИИ =====
 function connectWebSocket() {
@@ -978,451 +1043,72 @@ function sendTypingStatus(isTyping) {
     sendTypingWithRetry(isTyping);
 }
 
-// ===== АУДИО-ПЛЕЕР =====
-function createAudioPlayerHTML(audioUrl, duration) {
-    return `
-        <div class="audio-message">
-            <button class="audio-play-btn" data-playing="false">▶</button>
-            <div class="audio-progress">
-                <div class="audio-progress-bar" style="width:0%"></div>
-            </div>
-            <span class="audio-time">${formatDuration(duration)}</span>
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function showNotification(title, text, type = 'system') {
+    let container = document.querySelector('.notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'notification-container';
+        document.body.appendChild(container);
+    }
+    
+    const icons = { like: '❤️', message: '💬', system: '✅' };
+    
+    const notif = document.createElement('div');
+    notif.className = 'notification';
+    notif.innerHTML = `
+        <div class="notif-icon ${type}">${icons[type] || '🔔'}</div>
+        <div class="notif-body">
+            <div class="notif-title">${esc(title)}</div>
+            <div class="notif-text">${esc(text)}</div>
         </div>
+        <button class="notif-close">✕</button>
     `;
-}
-
-function initAudioPlayer(playBtn, progressBar, timeDisplay, audioUrl, duration) {
-    let audio = null;
-    let isPlaying = false;
-    let progressInterval = null;
     
-    playBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        
-        if (!audio) {
-            audio = new Audio(audioUrl);
-            audio.addEventListener('ended', function() {
-                stopPlayback();
-            });
-            audio.addEventListener('timeupdate', function() {
-                if (audio.duration) {
-                    const percent = (audio.currentTime / audio.duration) * 100;
-                    progressBar.style.width = Math.min(percent, 100) + '%';
-                    const remaining = Math.max(0, audio.duration - audio.currentTime);
-                    timeDisplay.textContent = formatDuration(Math.round(remaining));
-                }
-            });
-            audio.addEventListener('error', function(e) {
-                console.error('❌ Ошибка аудио:', e);
-                stopPlayback();
-            });
-        }
-        
-        if (isPlaying) {
-            stopPlayback();
-        } else {
-            startPlayback();
-        }
+    notif.querySelector('.notif-close').addEventListener('click', () => {
+        notif.classList.add('removing');
+        setTimeout(() => notif.remove(), 300);
     });
     
-    function startPlayback() {
-        if (!audio) return;
-        audio.play().catch(function(err) {
-            console.error('❌ Ошибка воспроизведения:', err);
-        });
-        isPlaying = true;
-        playBtn.textContent = '⏸';
-        playBtn.dataset.playing = 'true';
-        
-        progressInterval = setInterval(function() {
-            if (audio.duration) {
-                const remaining = Math.max(0, audio.duration - audio.currentTime);
-                timeDisplay.textContent = formatDuration(Math.round(remaining));
-            }
-        }, 200);
-    }
+    container.appendChild(notif);
     
-    function stopPlayback() {
-        if (audio) {
-            audio.pause();
-            audio.currentTime = 0;
+    setTimeout(() => {
+        if (notif.parentNode) {
+            notif.classList.add('removing');
+            setTimeout(() => notif.remove(), 300);
         }
-        isPlaying = false;
-        playBtn.textContent = '▶';
-        playBtn.dataset.playing = 'false';
-        progressBar.style.width = '0%';
-        timeDisplay.textContent = formatDuration(duration || 0);
-        if (progressInterval) {
-            clearInterval(progressInterval);
-            progressInterval = null;
-        }
+    }, 5000);
+    
+    const all = container.querySelectorAll('.notification');
+    if (all.length > 3) {
+        all[0].classList.add('removing');
+        setTimeout(() => all[0].remove(), 300);
     }
 }
 
-function formatDuration(seconds) {
-    if (!seconds || seconds < 0) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return mins + ':' + String(secs).padStart(2, '0');
+function navigateFromURL(page) {
+    sidebarBtns.forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector(`[data-page="${page}"]`);
+    if (btn) btn.classList.add('active');
+    
+    feedPageEl.classList.add('hidden');
+    profilePage.classList.add('hidden');
+    messagesPage.classList.add('hidden');
+    settingsPage.classList.add('hidden');
+    
+    if (page === 'feed') { feedPageEl.classList.remove('hidden'); loadFeed(); }
+    else if (page === 'messages') { messagesPage.classList.remove('hidden'); loadDialogs(); }
+    else if (page === 'settings') { settingsPage.classList.remove('hidden'); loadSettings(); }
+    
+    dialogsSidebar.classList.remove('chat-open');
+    messagesLayout.classList.remove('mobile-view');
 }
 
-// ===== КНОПКА КАК В TELEGRAM =====
-function initTelegramStyleButton() {
-    console.log('🎙 Инициализация кнопки Telegram-стиля...');
-    
-    const btn = document.getElementById('sendMessageBtn');
-    if (!btn) {
-        console.log('❌ Кнопка не найдена');
-        return;
-    }
-    
-    // Очищаем старые обработчики (создаём новую кнопку)
-    const newBtn = btn.cloneNode(true);
-    btn.parentNode.replaceChild(newBtn, btn);
-    
-    // Обновляем глобальную ссылку
-    window.sendMessageBtn = newBtn;
-    
-    let isRecording = false;
-    let mediaRecorder = null;
-    let audioChunks = [];
-    let holdTimer = null;
-    let isHolding = false;
-    
-    // Функция обновления UI кнопки
-    function updateButtonUI() {
-        const input = document.getElementById('messageInput');
-        const hasText = input && input.value.trim().length > 0;
-        
-        if (hasText) {
-            // Режим отправки текста
-            newBtn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-            newBtn.className = 'send-btn send-btn-text';
-            newBtn.title = 'Отправить сообщение';
-        } else {
-            // Режим микрофона
-            newBtn.innerHTML = '🎙';
-            newBtn.className = 'send-btn send-btn-voice';
-            newBtn.title = 'Удерживайте для записи голосового';
-        }
-    }
-    
-    // Следим за изменениями в поле ввода
-    const input = document.getElementById('messageInput');
-    if (input) {
-        input.addEventListener('input', updateButtonUI);
-        input.addEventListener('focus', updateButtonUI);
-        input.addEventListener('blur', updateButtonUI);
-    }
-    
-    // ===== ОБРАБОТЧИКИ ДЛЯ МЫШИ =====
-    newBtn.addEventListener('mousedown', function(e) {
-        const input = document.getElementById('messageInput');
-        if (input && input.value.trim().length > 0) return;
-        
-        e.preventDefault();
-        console.log('🎙 Начало удержания...');
-        isHolding = true;
-        
-        if (navigator.vibrate) navigator.vibrate(50);
-        
-        this.innerHTML = '⏹';
-        this.style.background = '#EF4444';
-        this.style.color = 'white';
-        this.style.transform = 'scale(1.1)';
-        this.classList.add('recording');
-        
-        holdTimer = setTimeout(() => {
-            if (isHolding) {
-                startRecording();
-            }
-        }, 200);
-    });
-    
-    newBtn.addEventListener('mouseup', function(e) {
-        e.preventDefault();
-        console.log('🎙 Отпускание...');
-        isHolding = false;
-        
-        clearTimeout(holdTimer);
-        
-        if (isRecording) {
-            stopRecordingAndSend();
-        } else {
-            this.innerHTML = '🎙';
-            this.style.background = '';
-            this.style.color = '';
-            this.style.transform = '';
-            this.classList.remove('recording');
-        }
-    });
-    
-    newBtn.addEventListener('mouseleave', function(e) {
-        if (isRecording || isHolding) {
-            console.log('🎙 Мышь ушла, отменяем');
-            isHolding = false;
-            clearTimeout(holdTimer);
-            
-            if (isRecording) {
-                cancelRecording();
-            }
-            
-            this.innerHTML = '🎙';
-            this.style.background = '';
-            this.style.color = '';
-            this.style.transform = '';
-            this.classList.remove('recording');
-        }
-    });
-    
-    // ===== ОБРАБОТЧИКИ ДЛЯ ТАЧА =====
-    newBtn.addEventListener('touchstart', function(e) {
-        const input = document.getElementById('messageInput');
-        if (input && input.value.trim().length > 0) return;
-        
-        e.preventDefault();
-        console.log('📱 Начало касания...');
-        isHolding = true;
-        
-        if (navigator.vibrate) navigator.vibrate(50);
-        
-        this.innerHTML = '⏹';
-        this.style.background = '#EF4444';
-        this.style.color = 'white';
-        this.style.transform = 'scale(1.1)';
-        this.classList.add('recording');
-        
-        holdTimer = setTimeout(() => {
-            if (isHolding) {
-                startRecording();
-            }
-        }, 200);
-    }, { passive: false });
-    
-    newBtn.addEventListener('touchend', function(e) {
-        e.preventDefault();
-        console.log('📱 Конец касания...');
-        isHolding = false;
-        
-        clearTimeout(holdTimer);
-        
-        if (isRecording) {
-            stopRecordingAndSend();
-        } else {
-            this.innerHTML = '🎙';
-            this.style.background = '';
-            this.style.color = '';
-            this.style.transform = '';
-            this.classList.remove('recording');
-        }
-    }, { passive: false });
-    
-    newBtn.addEventListener('touchcancel', function(e) {
-        console.log('📱 Касание отменено');
-        isHolding = false;
-        clearTimeout(holdTimer);
-        
-        if (isRecording) {
-            cancelRecording();
-        }
-        
-        this.innerHTML = '🎙';
-        this.style.background = '';
-        this.style.color = '';
-        this.style.transform = '';
-        this.classList.remove('recording');
-    }, { passive: false });
-    
-    // ===== КЛИК ПО КНОПКЕ =====
-    newBtn.addEventListener('click', function(e) {
-        const input = document.getElementById('messageInput');
-        const hasText = input && input.value.trim().length > 0;
-        
-        if (hasText) {
-            // Отправляем текст
-            if (typeof sendMsg === 'function') {
-                sendMsg();
-            }
-        } else {
-            // Ничего не делаем (как в Telegram)
-            console.log('🎙 Клик по микрофону (пусто)');
-        }
-    });
-    
-    // ===== ФУНКЦИИ ЗАПИСИ =====
-    function startRecording() {
-        console.log('🎙 Старт записи...');
-        
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            alert('Ваш браузер не поддерживает запись голоса');
-            return;
-        }
-        
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(function(stream) {
-                console.log('✅ Микрофон доступен');
-                audioChunks = [];
-                isRecording = true;
-                
-                const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
-                mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
-                
-                mediaRecorder.ondataavailable = function(event) {
-                    if (event.data.size > 0) {
-                        audioChunks.push(event.data);
-                    }
-                };
-                
-                mediaRecorder.onstop = function() {
-                    const blob = new Blob(audioChunks, { type: mimeType });
-                    console.log('📦 Запись завершена, размер:', blob.size);
-                    
-                    if (blob.size > 2000) {
-                        sendVoiceMessage(blob);
-                    } else if (blob.size > 0) {
-                        alert('Запись слишком короткая');
-                    }
-                    
-                    stream.getTracks().forEach(function(track) { track.stop(); });
-                    mediaRecorder = null;
-                    isRecording = false;
-                    
-                    // Возвращаем кнопку
-                    newBtn.innerHTML = '🎙';
-                    newBtn.style.background = '';
-                    newBtn.style.color = '';
-                    newBtn.style.transform = '';
-                    newBtn.classList.remove('recording');
-                };
-                
-                mediaRecorder.start(1000);
-                
-                setTimeout(function() {
-                    if (mediaRecorder && mediaRecorder.state === 'recording') {
-                        mediaRecorder.stop();
-                    }
-                }, 60000);
-            })
-            .catch(function(err) {
-                console.error('❌ Ошибка микрофона:', err);
-                alert('Нет доступа к микрофону');
-                isRecording = false;
-                newBtn.innerHTML = '🎙';
-                newBtn.style.background = '';
-                newBtn.style.color = '';
-                newBtn.style.transform = '';
-                newBtn.classList.remove('recording');
-            });
-    }
-    
-    function stopRecordingAndSend() {
-        console.log('⏹ Остановка записи...');
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-        }
-    }
-    
-    function cancelRecording() {
-        console.log('❌ Отмена записи');
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.onstop = function() {
-                audioChunks = [];
-                mediaRecorder = null;
-                isRecording = false;
-            };
-            mediaRecorder.stop();
-        } else {
-            isRecording = false;
-        }
-        
-        newBtn.innerHTML = '🎙';
-        newBtn.style.background = '';
-        newBtn.style.color = '';
-        newBtn.style.transform = '';
-        newBtn.classList.remove('recording');
-    }
-    
-    function sendVoiceMessage(blob) {
-        console.log('📤 Отправка голосового, размер:', blob.size);
-        
-        let to = window.currentChatPartner;
-        if (!to) {
-            const activeDialog = document.querySelector('.dialog-item.active');
-            if (activeDialog) to = activeDialog.dataset.userId;
-        }
-        if (!to) {
-            const header = document.getElementById('chatPartnerText');
-            if (header) {
-                const match = header.innerHTML.match(/data-userid="([^"]+)"/);
-                if (match) to = match[1];
-            }
-        }
-        
-        if (!to) {
-            alert('❌ Откройте чат с собеседником');
-            return;
-        }
-        
-        const formData = new FormData();
-        formData.append('to', to);
-        formData.append('duration', Math.round(blob.size / 16000) || 1);
-        formData.append('audio', blob, 'voice.webm');
-        
-        const token = localStorage.getItem('token');
-        if (!token) {
-            alert('❌ Вы не авторизованы');
-            return;
-        }
-        
-        newBtn.innerHTML = '⏳';
-        newBtn.style.background = '#F59E0B';
-        newBtn.style.color = 'white';
-        
-        fetch('/api/messages/audio', {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + token },
-            body: formData
-        })
-        .then(async function(r) {
-            const text = await r.text();
-            if (!r.ok) {
-                try {
-                    const data = JSON.parse(text);
-                    throw new Error(data.error || 'Ошибка');
-                } catch(e) {
-                    throw new Error('Ошибка: ' + text);
-                }
-            }
-            return JSON.parse(text);
-        })
-        .then(function(data) {
-            console.log('✅ Голосовое отправлено!', data);
-            if (window.loadMessages) {
-                window.lastMessagesHash = '';
-                window.loadMessages();
-            }
-            if (window.loadDialogs) {
-                window.loadDialogs();
-            }
-        })
-        .catch(function(err) {
-            console.error('❌ Ошибка:', err);
-            alert('❌ ' + err.message);
-        })
-        .finally(function() {
-            newBtn.innerHTML = '🎙';
-            newBtn.style.background = '';
-            newBtn.style.color = '';
-            newBtn.style.transform = '';
-            newBtn.classList.remove('recording');
-        });
-    }
-    
-    // Начальное обновление
-    setTimeout(updateButtonUI, 100);
-    
-    console.log('✅ Кнопка Telegram-стиля готова!');
-}
+window.addEventListener('popstate', () => {
+    const path = location.pathname.replace('/', '') || 'feed';
+    navigateFromURL(path);
+});
 
 // ===== ДОПОЛНИТЕЛЬНАЯ ИНИЦИАЛИЗАЦИЯ =====
 document.addEventListener('DOMContentLoaded', function() {
@@ -1438,7 +1124,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('✅ messageInput уже существует при загрузке');
     }
     
-    setTimeout(initTelegramStyleButton, 1000);
+    setTimeout(initTelegramButton, 1000);
 });
 
 console.log('✅ WebSocket клиент готов');
